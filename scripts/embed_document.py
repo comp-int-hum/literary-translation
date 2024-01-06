@@ -2,7 +2,8 @@ import logging
 import gzip
 import json
 import argparse
-from sentence_transformers import SentenceTransformer
+from transformers import MBartForConditionalGeneration, MBart50TokenizerFast
+from utils import Location
 
 logger = logging.getLogger("embed_document")
 
@@ -17,21 +18,43 @@ if __name__ == "__main__":
     args = parser.parse_args()
 
     logging.basicConfig(level=logging.INFO)
-    
-    model = SentenceTransformer('sentence-transformers/LaBSE', device=args.device)
+
+    model = MBartForConditionalGeneration.from_pretrained("facebook/mbart-large-50-many-to-many-mmt")
+    tokenizer = MBart50TokenizerFast.from_pretrained("facebook/mbart-large-50-many-to-many-mmt")
+    tokenizer.src_lang = args.language
     model.to(args.device)
+    
     with gzip.open(args.input, "rt") as ifd, gzip.open(args.output, "wt") as ofd:
         batch = []
         for i, line in enumerate(ifd):
             item = json.loads(line)
-            batch.append((item["id"], item["text"]))
+            loc = Location(item["location"])
+            batch.append((loc, item["text"]))
             if len(batch) == args.batch_size:
-                embeddings = model.encode([s for _, s in batch])
-                for (label, text), emb in zip(batch, embeddings):
-                    ofd.write(json.dumps({"id" : label, "embedding" : emb.tolist()}) + "\n")
+                encoded = tokenizer([t for _, t in batch], return_tensors="pt", padding=True)
+                encoded.to(args.device)
+                out = model.generate(
+                    **encoded,
+                    forced_bos_token_id=tokenizer.lang_code_to_id[args.language],
+                    return_dict_in_generate=True,
+                    output_hidden_states=True
+                )
+                for (loc, text), emb, mask in zip(batch, out["encoder_hidden_states"][-1], encoded["attention_mask"]):
+                    emb = emb[mask==1].sum(0) / emb.shape[0]
+                    ofd.write(json.dumps({"location" : loc, "embedding" : emb.tolist()}) + "\n")
                 batch = []
-                logger.info("Processed %d sentences", i)
+                logger.info("Processed %d sentences", i + 1)
+
         if len(batch) > 0:
-            embeddings = model.encode([s for _, s in batch])
-            for (label, text), emb in zip(batch, embeddings):
-                ofd.write(json.dumps({"id" : label, "embedding" : emb.tolist()}) + "\n")
+            encoded = tokenizer([t for _, t in batch], return_tensors="pt", padding=True)
+            encoded.to(args.device)
+            out = model.generate(
+                **encoded,
+                forced_bos_token_id=tokenizer.lang_code_to_id[args.language],
+                return_dict_in_generate=True,
+                output_hidden_states=True
+            )
+            for (loc, text), emb, mask in zip(batch, out["encoder_hidden_states"][-1], encoded["attention_mask"]):
+                emb = emb[mask==1].sum(0) / emb.shape[0]
+                ofd.write(json.dumps({"location" : loc, "embedding" : emb.tolist()}) + "\n")
+            logger.info("Processed %d sentences", i + 1 + len(batch))
