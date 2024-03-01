@@ -55,8 +55,11 @@ env = Environment(
             action="python scripts/translate_document.py --input ${SOURCES[0]} --output ${TARGETS[0]} --source_lang ${SRC_LANG} --target_lang ${TGT_LANG} --device ${DEVICE} --batch_size ${BATCH_SIZE} ${'--disallow_target ' + DISALLOW_TARGET if DISALLOW_TARGET else ''} ${'--disallow_referenced ' + DISALLOW_REFERENCED if DISALLOW_REFERENCED else ''} --vote_threshold ${VOTE_THRESHOLD}"
         ),
         "ScoreEmbeddings" : Builder(
-            action="python scripts/score_embeddings.py --gold ${SOURCES[0]} --embeddings ${SOURCES[1]} --output ${TARGETS[0]} --vote_threshold ${VOTE_THRESHOLD}"
+            action="python scripts/score_embeddings.py --gold ${SOURCES[0]} --embeddings ${SOURCES[1]} --output ${TARGETS[0]} --vote_threshold ${VOTE_THRESHOLD} --exclude ${EXCLUDE} --source ${FROM} --target ${TO}"
         ),
+        "SummarizeScores" : Builder(
+            action="python scripts/summarize_scores.py --output ${TARGETS[0]} --inputs ${SOURCES}"
+        )
     }
 )
 
@@ -75,6 +78,7 @@ env.Decider("timestamp-newer")
 
 lang_map = env["LANGUAGE_MAP"]
 r_lang_map = {v : k for k, v in lang_map.items()}
+scores = []
 
 for fname in glob(os.path.join(env["BIBLE_CORPUS"], "bibles", "*xml")):
     base, _ = os.path.splitext(os.path.basename(fname))
@@ -89,11 +93,15 @@ for fname in glob(os.path.join(env["BIBLE_CORPUS"], "bibles", "*xml")):
             orig,
             LANG=lang
         )
-        score = env.ScoreEmbeddings(
-           "work/{}-score.json".format(base),
-           [env["CROSS_REFERENCE_FILE"], emb]
+        self_score = env.ScoreEmbeddings(
+            "work/{}-score.json".format(base),
+            [env["CROSS_REFERENCE_FILE"], emb],
+            EXCLUDE="none",
+            FROM=base,
+            TO=base
         )
         for other_lang in set([v for k, v in lang_map.items() if v != lang]):
+            other_base = r_lang_map[other_lang]
             trans = env.TranslateDocument(
                 "work/{}-{}.json.gz".format(base, other_lang),
                 [
@@ -159,17 +167,41 @@ for fname in glob(os.path.join(env["BIBLE_CORPUS"], "bibles", "*xml")):
             )   
             score = env.ScoreEmbeddings(
                 "work/{}-{}-score.json".format(base, other_lang),
-                [env["CROSS_REFERENCE_FILE"], emb]
+                [env["CROSS_REFERENCE_FILE"], emb],
+                EXCLUDE="none",
+                FROM=base,
+                TO=other_base
             )
             excl_targ_score = env.ScoreEmbeddings(
                 "work/{}-excl-targ-{}-score.json".format(base, other_lang),
-                [env["CROSS_REFERENCE_FILE"], excl_targ_emb]
+                [env["CROSS_REFERENCE_FILE"], excl_targ_emb],
+                EXCLUDE="target",
+                FROM=base,
+                TO=other_base
             )
             excl_ref_score = env.ScoreEmbeddings(
                 "work/{}-excl-ref-{}-score.json".format(base, other_lang),
-                [env["CROSS_REFERENCE_FILE"], excl_ref_emb]
+                [env["CROSS_REFERENCE_FILE"], excl_ref_emb],
+                EXCLUDE="reference",
+                FROM=base,
+                TO=other_base
             )
             excl_both_score = env.ScoreEmbeddings(
                 "work/{}-excl-both-{}-score.json".format(base, other_lang),
-                [env["CROSS_REFERENCE_FILE"], excl_both_emb]
+                [env["CROSS_REFERENCE_FILE"], excl_both_emb],
+                EXCLUDE="both",
+                FROM=base,
+                TO=other_base
             )
+            scores += [
+                self_score,
+                score,
+                excl_targ_score,
+                excl_ref_score,
+                excl_both_score
+            ]
+
+summary = env.SummarizeScores(
+    "work/summary.tex",
+    sorted(scores)
+)

@@ -15,12 +15,10 @@ if __name__ == "__main__":
 
     parser = argparse.ArgumentParser()
     parser.add_argument("--gold", dest="gold", help="Input file")
-    parser.add_argument("--embeddings", dest="embeddings", help="Input file")
+    parser.add_argument("--translation", dest="translation", help="Input file")
+    parser.add_argument("--human_translation", dest="human_translation", help="Input file")
     parser.add_argument("--output", dest="output", help="Output file")
-    parser.add_argument("--vote_threshold", dest="vote_threshold", default=0, type=int)
-    parser.add_argument("--exclude", dest="exclude", default="none")
-    parser.add_argument("--source", dest="source", required=True)
-    parser.add_argument("--target", dest="target", required=True)
+    parser.add_argument("--vote_threshold", dest="vote_threshold", default=50, type=int)
     args = parser.parse_args()
 
     logging.basicConfig(level=logging.INFO)
