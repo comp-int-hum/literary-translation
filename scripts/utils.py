@@ -68,6 +68,37 @@ JDE
 REV""".split())}
 id2book = {i : b for b, i in book2id.items()}
 
+NT = set(
+    """MAT
+MAR
+LUK
+JOH
+ACT
+ROM
+1CO
+2CO
+GAL
+EPH
+PHP
+COL
+1TH
+2TH
+1TI
+2TI
+TIT
+PHM
+HEB
+JAM
+1PE
+2PE
+1JO
+2JO
+3JO
+JDE
+REV""".split()
+    )
+
+
 mapping = {
     "1KGS" : "1KI",
     "2KGS" : "2KI",    
@@ -91,7 +122,7 @@ class Location(dict):
             assert book3 in book2id
             self["book"] = book3
             self["chapter"] = int(chapter)
-            self["verse"] = int(verse)
+            self["verse"] = int(re.sub(r"\D", "", verse))
         elif isinstance(value, (dict,)):
             for k in ["book", "chapter", "verse"]:
                 self[k] = value[k]
@@ -115,9 +146,5 @@ class Location(dict):
     def __hash__(self):
         return hash(repr(self))
 
-    #def to_label(s):
-#    book, chapter, verse = re.sub(r"^b\.", "", s).upper().split(".")
-#    book3 = mapping.get(book, book[:3])
-#    if book3 not in book2id:
-#        raise Exception(s)
-#    return (book2id[book3], chapter, verse)
+    def testament(self):
+        return "new" if self["book"] in NT else "old"

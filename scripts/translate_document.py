@@ -4,11 +4,14 @@ import json
 import argparse
 import nltk
 import iso639
-from transformers import MBartForConditionalGeneration, MBart50TokenizerFast
+from transformers import NllbTokenizer, AutoModelForSeq2SeqLM
 from utils import Location
+import stopwordsiso as sw
+import sys
 
 logger = logging.getLogger("translate_document")
 
+# marathi japanese
 
 if __name__ == "__main__":
 
@@ -26,14 +29,15 @@ if __name__ == "__main__":
 
     logging.basicConfig(level=logging.INFO)
 
-    # bad_words_ids
-    model = MBartForConditionalGeneration.from_pretrained("facebook/mbart-large-50-many-to-many-mmt")
-    tokenizer = MBart50TokenizerFast.from_pretrained("facebook/mbart-large-50-many-to-many-mmt", add_prefix_space=True)
+    tokenizer = NllbTokenizer.from_pretrained("facebook/nllb-200-distilled-600M", src_lang=args.source_lang, tgt_lang=args.target_lang)
+    model = AutoModelForSeq2SeqLM.from_pretrained("facebook/nllb-200-distilled-600M")
     model.to(args.device)
-    tokenizer.src_lang = args.source_lang
 
-    target_stopwords = set(nltk.corpus.stopwords.words(iso639.find(args.target_lang.split("_")[0])["name"].lower()))
-    
+    try:
+        target_stopwords = set(nltk.corpus.stopwords.words(iso639.find(args.target_lang.split("_")[0])["name"].lower()))
+    except:
+        target_stopwords = set(sw.stopwords(iso639.find(args.target_lang.split("_")[0])["iso639_1"]))
+
     disallow = {}
     if args.disallow_target:
         with gzip.open(args.disallow_target, "rt") as ifd:
@@ -82,6 +86,7 @@ if __name__ == "__main__":
                 generated_tokens = model.generate(
                     **encoded,
                     forced_bos_token_id=tokenizer.lang_code_to_id[args.target_lang],
+                    max_length=100,
                     bad_words_ids=bad_token_ids if bad_token_ids else None
                 )
                 translations = tokenizer.batch_decode(generated_tokens, skip_special_tokens=True)
