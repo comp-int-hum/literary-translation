@@ -6,14 +6,12 @@ import os.path
 import pandas
 
 captions = {
-    "none" : "no vocabulary masking",
-    "target" : "masked vocabulary from human translation",
-    "reference" : "masked vocabulary from translations of referent sentences",
-    "both" : "masked vocabulary from both human and referent translations"
+    "original" : "untranslated",
+    "unconstrained" : "no vocabulary masking",
+    "exclude_human" : "masked vocabulary from human translation",
+    "exclude_references" : "masked vocabulary from translations of referent sentences",
+    "exclude_both" : "masked vocabulary from both human and referent translations"
 }
-# human source, target
-# no vocab masking delta w.r.t. human source, w.r.t. human target
-# masking variants w.r.t. no vocab masking
 
 if __name__ == "__main__":
 
@@ -22,57 +20,33 @@ if __name__ == "__main__":
     parser.add_argument("--output", dest="output", help="Output file")
     args = parser.parse_args()
 
+    originals = {}
     vals = {}
-    rvals = {}
-    svals = {}
-    cols = set()
-    rows = set()
-    excls = set()
     for fname in args.inputs:
-        with open(fname, "rt") as ifd:
+        with gzip.open(fname, "rt") as ifd:
             j = json.loads(ifd.read())
-            src = j["source"]
-            rows.add(src)
-            tgt = j["target"]
-            cols.add(tgt)
-            exc = j["exclude"]
-            excls.add(exc)
+            testament = j["testament"]
+            language = j["language"]
+            condition = j["condition"]
             ratio = j["ratio"]
-            vals[src] = vals.get(src, {})
-            vals[src][tgt] = vals[src].get(tgt, {})
-            vals[src][tgt][exc] = ratio
-
-            key = (src, tgt)
-            rvals[key] = rvals.get(key, {})
-            rvals[key][exc] = ratio
-
+            if condition == "original":
+                originals[testament] = ratio
+            else:
+                key = (testament, condition)
+                vals[testament] = vals.get(testament, {})
+                vals[testament][condition] = vals[testament].get(condition, {})
+                vals[testament][condition][language] = ratio
+                
+    rvals = []
+    for testament, conditions in vals.items():
+        for condition, languages in conditions.items():
+            d = {k : v for k, v in languages.items()}
+            d["Testament"] = testament
+            d["Condition"] = condition
+            rvals.append(d)
     with open(args.output, "wt") as ofd:
-        human_scores = dict(sum([[(src, {"Language" : src, "Score" : exs["none"]}) for tgt, exs in tgts.items() if tgt == src] for src, tgts in vals.items()], []))
-        ofd.write(pandas.DataFrame(human_scores.values()).to_latex(na_rep="", caption="Inter-textuality scores of human translations", float_format="%.2f", index=False) + "\n")
-        
-        for exc in excls:
-            data = []
-            for src in sorted(rows):
-                row = {"Source" : src}
-                for tgt in sorted(cols):
-                    if tgt != src:
-                        row[tgt] = (vals[src][tgt][exc] - human_scores[src]["Score"]) / (1.0 - human_scores[src]["Score"])
-                data.append(row)
-            df = pandas.DataFrame(data)
-            ofd.write(df.to_latex(na_rep="", caption="Percent-delta from source language human translation with {}".format(captions[exc]), float_format="%.2f", index=False) + "\n")
-            data = []
-            for src in sorted(rows):
-                row = {"Source" : src}
-                for tgt in sorted(cols):
-                    if tgt != src:
-                        row[tgt] = (vals[src][tgt][exc] - human_scores[tgt]["Score"]) / (1.0 - human_scores[tgt]["Score"])
-                data.append(row)
-            df = pandas.DataFrame(data)
-            ofd.write(df.to_latex(na_rep="", caption="Percent-delta from target language human translation with {}".format(captions[exc]), float_format="%.2f", index=False) + "\n")
-
-        
-            
-        #rdata = [dict([("pair", "{}-to-{}".format(t, s))] + [(k, v) for k, v in vs.items()]) for (t, s), vs in rvals.items() if t != s]
-        #df = pandas.DataFrame(rdata, columns=["pair", "none", "reference", "target", "both"])
-        #ofd.write(df.to_latex(na_rep="", caption="By masking", float_format="%.2f", index=False, columns=["pair", "none", "reference", "target", "both"]) + "\n")
-
+        df = pandas.DataFrame(rvals)
+        df["Condition"] = df["Condition"].astype(pandas.CategoricalDtype(["human_translation", "unconstrained", "exclude_human", "exclude_references", "exclude_both"], ordered=True))
+        df["Testament"] = df["Testament"].astype(pandas.CategoricalDtype(["old", "new"], ordered=True))
+        df = df[["Testament", "Condition"] + [x for x in df.columns if x not in ["Condition", "Testament"]]].sort_values(["Testament", "Condition"])
+        ofd.write(df.to_latex(na_rep="", caption="Inter-textuality scores of translations (original old and new testaments have scores of {:.2f} and {:.2f}, repectively)".format(originals["old"], originals["new"]), float_format="%.2f", index=False) + "\n")

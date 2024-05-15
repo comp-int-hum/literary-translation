@@ -18,12 +18,16 @@ if __name__ == "__main__":
     parser.add_argument("--embeddings", dest="embeddings", help="Input file")
     parser.add_argument("--output", dest="output", help="Output file")
     parser.add_argument("--vote_threshold", dest="vote_threshold", default=0, type=int)
-    parser.add_argument("--exclude", dest="exclude", default="none")
-    parser.add_argument("--source", dest="source", required=True)
-    parser.add_argument("--target", dest="target", required=True)
+    parser.add_argument("--testament", dest="testament", default="none")
+    parser.add_argument("--language", dest="language", required=True)
+    parser.add_argument("--condition", dest="condition", required=True)
+    parser.add_argument("--random_seed", dest="random_seed", default=None, type=int)
     args = parser.parse_args()
 
     logging.basicConfig(level=logging.INFO)
+
+    if args.random_seed:
+        random.seed(args.random_seed)
     
     books = set()
     labels = set()
@@ -89,7 +93,7 @@ if __name__ == "__main__":
             nonref_dists.append(numpy.dot(src_emb, poss[0]))
 
 
-    with open(args.output, "wt") as ofd:
+    with gzip.open(args.output, "wt") as ofd:
         s_ref_dists = sum(ref_dists)
         s_nonref_dists = sum(nonref_dists)
-        ofd.write(json.dumps({"reference_similarity" : s_ref_dists, "nonreference_similarity" : s_nonref_dists, "ratio" : s_ref_dists / s_nonref_dists, "num_refs" : len(ref_dists), "file_name" : args.embeddings, "source" : args.source, "target" : args.target, "exclude" : args.exclude}) + "\n")
+        ofd.write(json.dumps({"reference_similarity" : s_ref_dists, "nonreference_similarity" : s_nonref_dists, "ratio" : s_ref_dists / s_nonref_dists, "num_refs" : len(ref_dists), "file_name" : args.embeddings, "testament" : args.testament, "language" : args.language, "condition" : args.condition}) + "\n")

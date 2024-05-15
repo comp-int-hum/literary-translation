@@ -64,7 +64,7 @@ env = Environment(
             action="python scripts/translate_document.py --input ${SOURCES[0]} --output ${TARGETS[0]} --source_lang ${SRC_LANG} --target_lang ${TGT_LANG} --device ${DEVICE} --batch_size ${BATCH_SIZE} ${'--disallow_referenced ' + DISALLOW_REFERENCED if DISALLOW_REFERENCED else ''} ${'--vote_threshold ' + str(VOTE_THRESHOLD) if VOTE_THRESHOLD else ''} ${'--disallow_target ' + SOURCES[1].rstr() if len(SOURCES) == 2 else ''}"
         ),
         "ScoreEmbeddings" : Builder(
-            action="python scripts/score_embeddings.py --gold ${SOURCES[0]} --embeddings ${SOURCES[1]} --output ${TARGETS[0]} --vote_threshold ${VOTE_THRESHOLD} --exclude ${EXCLUDE} --source ${FROM} --target ${TO}"
+            action="python scripts/score_embeddings.py --gold ${SOURCES[0]} --embeddings ${SOURCES[1]} --output ${TARGETS[0]} --vote_threshold ${VOTE_THRESHOLD} --testament ${TESTAMENT} --language ${LANGUAGE} --condition ${CONDITION_NAME} --random_seed ${RANDOM_SEED}"
         ),
         "SummarizeScores" : Builder(
             action="python scripts/summarize_scores.py --output ${TARGETS[0]} --inputs ${SOURCES}"
@@ -83,24 +83,24 @@ for testament in ["old", "new"]:
     original_language = env["ORIGINAL_LANGUAGES"][testament]
     embeddings[testament] = embeddings.get(testament, {original_language : {}})
     if env["USE_PRECOMPUTED_EMBEDDINGS"]:
-        renv = env.Override({"TESTAMENT" : testament, "LANGUAGE" : original_language, "CONSTRAINT_NAME" : "original"})
-        emb = env.File(renv.subst("work/${TESTAMENT}/${CONSTRAINT_NAME}/${LANGUAGE}-embedded.json.gz"))
+        renv = env.Override({"TESTAMENT" : testament, "LANGUAGE" : original_language, "CONDITION_NAME" : "original"})
+        emb = env.File(renv.subst("work/${TESTAMENT}/${CONDITION_NAME}/${LANGUAGE}-embedded.json.gz"))
         orig = None
         human_trans = None
     else:
         orig = env.ConvertFromXML(
-            "work/${TESTAMENT}/${CONSTRAINT_NAME}/${LANGUAGE}.json.gz",
+            "work/${TESTAMENT}/${CONDITION_NAME}/${LANGUAGE}.json.gz",
             "${BIBLE_CORPUS}/bibles/${LANGUAGE}.xml",
             LANGUAGE=original_language,
             TESTAMENT=testament,
-            CONSTRAINT_NAME="original"
+            CONDITION_NAME="original"
         )        
         emb = env.EmbedDocument(
-            "work/${TESTAMENT}/${CONSTRAINT_NAME}/${LANGUAGE}-embedded.json.gz",
+            "work/${TESTAMENT}/${CONDITION_NAME}/${LANGUAGE}-embedded.json.gz",
             orig,
             LANGUAGE=original_language,
             TESTAMENT=testament,
-            CONSTRAINT_NAME="original",
+            CONDITION_NAME="original",
             STEAMROLLER_ACCOUNT=env.get("GPU_ACCOUNT", None),
             STEAMROLLER_QUEUE=env.get("GPU_QUEUE", None),
             BATCH_SIZE=1000,
@@ -113,22 +113,22 @@ for testament in ["old", "new"]:
     for other_language in env["TRANSLATION_LANGUAGES"]:
         embeddings[testament][other_language] = embeddings[testament].get(other_language, {})
         if env["USE_PRECOMPUTED_EMBEDDINGS"]:
-            renv = env.Override({"TESTAMENT" : testament, "LANGUAGE" : other_language, "CONSTRAINT_NAME" : "human_translation"})
-            emb = env.File(renv.subst("work/${TESTAMENT}/${CONSTRAINT_NAME}/${LANGUAGE}-embedded.json.gz"))
+            renv = env.Override({"TESTAMENT" : testament, "LANGUAGE" : other_language, "CONDITION_NAME" : "human_translation"})
+            emb = env.File(renv.subst("work/${TESTAMENT}/${CONDITION_NAME}/${LANGUAGE}-embedded.json.gz"))
         else:
             human_trans = env.ConvertFromXML(
-                "work/${TESTAMENT}/${CONSTRAINT_NAME}/${LANGUAGE}.json.gz",
+                "work/${TESTAMENT}/${CONDITION_NAME}/${LANGUAGE}.json.gz",
                 "${BIBLE_CORPUS}/bibles/${LANGUAGE}.xml",
                 LANGUAGE=other_language,
                 TESTAMENT=testament,
-                CONSTRAINT_NAME="human_translation"
+                CONDITION_NAME="human_translation"
             )
             emb = env.EmbedDocument(
-                "work/${TESTAMENT}/${CONSTRAINT_NAME}/${LANGUAGE}-embedded.json.gz",
+                "work/${TESTAMENT}/${CONDITION_NAME}/${LANGUAGE}-embedded.json.gz",
                 human_trans,
                 LANGUAGE=other_language,
                 TESTAMENT=testament,
-                CONSTRAINT_NAME="human_translation",
+                CONDITION_NAME="human_translation",
                 STEAMROLLER_ACCOUNT=env.get("GPU_ACCOUNT", None),
                 STEAMROLLER_QUEUE=env.get("GPU_QUEUE", None),
                 BATCH_SIZE=1000,
@@ -141,24 +141,24 @@ for testament in ["old", "new"]:
         src_lang = env["LANGUAGE_MAP"][original_language][1]
         tgt_lang = env["LANGUAGE_MAP"][other_language][1]        
 
-        for constraint_name, inputs, args in [
+        for condition_name, inputs, args in [
                 ("unconstrained", orig, {}),
                 ("exclude_human", [orig, human_trans], {}),
                 ("exclude_references", orig, {"DISALLOW_REFERENCED" : env["CROSS_REFERENCE_FILE"]}),
                 ("exclude_both", [orig, human_trans], {"DISALLOW_REFERENCED" : env["CROSS_REFERENCE_FILE"]}),
         ]:
             if env["USE_PRECOMPUTED_EMBEDDINGS"]:
-                renv = env.Override({"TESTAMENT" : testament, "LANGUAGE" : other_language, "CONSTRAINT_NAME" : constraint_name})
-                emb = env.File(renv.subst("work/${TESTAMENT}/nllb_translations/${CONSTRAINT_NAME}/${LANGUAGE}-embedded.json.gz"))
+                renv = env.Override({"TESTAMENT" : testament, "LANGUAGE" : other_language, "CONDITION_NAME" : condition_name})
+                emb = env.File(renv.subst("work/${TESTAMENT}/nllb_translations/${CONDITION_NAME}/${LANGUAGE}-embedded.json.gz"))
             else:
                 translation = env.TranslateDocument(
-                    "work/${TESTAMENT}/nllb_translations/${CONSTRAINT_NAME}/${LANGUAGE}.json.gz",
+                    "work/${TESTAMENT}/nllb_translations/${CONDITION_NAME}/${LANGUAGE}.json.gz",
                     inputs,
                     TESTAMENT=testament,
                     LANGUAGE=other_language,
                     SRC_LANG=src_lang,
                     TGT_LANG=tgt_lang,
-                    CONSTRAINT_NAME=constraint_name,
+                    CONDITION_NAME=condition_name,
                     STEAMROLLER_ACCOUNT=env.get("GPU_ACCOUNT", None),
                     STEAMROLLER_QUEUE=env.get("GPU_QUEUE", None),
                     BATCH_SIZE=512,
@@ -170,11 +170,11 @@ for testament in ["old", "new"]:
                 )
 
                 emb = env.EmbedDocument(
-                    "work/${TESTAMENT}/nllb_translations/${CONSTRAINT_NAME}/${LANGUAGE}-embedded.json.gz",
+                    "work/${TESTAMENT}/nllb_translations/${CONDITION_NAME}/${LANGUAGE}-embedded.json.gz",
                     translation,
                     TESTAMENT=testament,
                     LANGUAGE=other_language,
-                    CONSTRAINT_NAME=constraint_name,
+                    CONDITION_NAME=condition_name,
                     STEAMROLLER_ACCOUNT=env.get("GPU_ACCOUNT", None),
                     STEAMROLLER_QUEUE=env.get("GPU_QUEUE", None),
                     BATCH_SIZE=1000,
@@ -183,21 +183,24 @@ for testament in ["old", "new"]:
                     STEAMROLLER_TIME="00:30:00",
                     DEVICE="cuda"                    
                 )[0]
-            embeddings[testament][other_language][constraint_name] = emb
+            embeddings[testament][other_language][condition_name] = emb
 
+scores = []
+for testament, languages in embeddings.items():
+    for language, conditions in languages.items():
+        for condition_name, emb in conditions.items():
+            scores.append(
+                env.ScoreEmbeddings(
+                    "work/${TESTAMENT}/${CONDITION_NAME}/${LANGUAGE}-score.json.gz",
+                    [env["CROSS_REFERENCE_FILE"], emb],
+                    TESTAMENT=testament,
+                    LANGUAGE=language,
+                    CONDITION_NAME=condition_name,
+                    RANDOM_SEED=1
+                )
+            )
 
-# for testament, languages in embeddings.items():
-#     for language, constraints in languages.items():
-#         for constraint_name, emb in constraints.items():
-#             self_score = env.ScoreEmbeddings(
-#                 "work/${TESTAMENT}/${CONSTRAINT_NAME}/${LANGUAGE}-score.json",
-#                 [env["CROSS_REFERENCE_FILE"], emb],
-#                 TESTAMENT=testament,
-#                 LANGUAGE=language,
-#                 CONSTRAINT_NAME=constraint_name
-#             )
-
-# summary = env.SummarizeScores(
-#     "work/summary.tex",
-#     sorted(scores)
-# )
+summary = env.SummarizeScores(
+    "work/summary.tex",
+    sorted(scores)
+)
