@@ -43,7 +43,7 @@ if __name__ == "__main__":
         with gzip.open(args.disallow_target, "rt") as ifd:
             for i, line in enumerate(ifd):
                 item = json.loads(line)
-                disallow[Location(item["location"])] = [w for w in item["text"].split() if w.lower() not in target_stopwords]
+                disallow[Location(item["location"])] = sum([[w.lower(), w.title()] for w in item["text"].split() if w.lower() not in target_stopwords], [])
 
     back_references = {}
     previous_translations = {}
@@ -94,7 +94,17 @@ if __name__ == "__main__":
 
                     toks = trans.split()
                     if args.disallow_referenced:
-                        previous_translations[location] = [tokenizer([w], add_special_tokens=False).input_ids[0] for w in toks if w.lower() not in target_stopwords]
+                        previous_translations[location] = sum(
+                            [
+                                [
+                                    tokenizer([w.lower()], add_special_tokens=False).input_ids[0],
+                                    tokenizer([w.title()], add_special_tokens=False).input_ids[0]
+                                ] for w in toks if w.lower() not in target_stopwords
+                            ],
+                            []
+                        )
+                        
+                                    
                     ofd.write(json.dumps({"location" : location, "text" : trans}) + "\n")
                 batch = []
                 logger.info("Processed %d sentences", i + 1)
