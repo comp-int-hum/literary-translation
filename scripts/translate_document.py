@@ -4,7 +4,7 @@ import json
 import argparse
 import nltk
 import iso639
-from transformers import NllbTokenizer, AutoModelForSeq2SeqLM
+from transformers import NllbTokenizer, AutoModelForSeq2SeqLM, AutoTokenizer
 from utils import Location
 import stopwordsiso as sw
 import sys
@@ -25,12 +25,13 @@ if __name__ == "__main__":
     parser.add_argument("--target_lang", dest="target_lang", default="fr_XX")
     parser.add_argument("--device", dest="device", default="cpu")
     parser.add_argument("--batch_size", dest="batch_size", type=int, default=10)
+    parser.add_argument("--model", type=str)
     args = parser.parse_args()
 
     logging.basicConfig(level=logging.INFO)
-
-    tokenizer = NllbTokenizer.from_pretrained("facebook/nllb-200-distilled-600M", src_lang=args.source_lang, tgt_lang=args.target_lang)
-    model = AutoModelForSeq2SeqLM.from_pretrained("facebook/nllb-200-distilled-600M")
+    # model = "facebook/nllb-200-distilled-600M"
+    tokenizer = AutoTokenizer.from_pretrained(args.model, src_lang=args.source_lang, tgt_lang=args.target_lang)
+    model = AutoModelForSeq2SeqLM.from_pretrained(args.model)
     model.to(args.device)
 
     try:
