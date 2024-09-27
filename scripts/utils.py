@@ -1,4 +1,6 @@
 import re
+import json
+import gzip
 
 book2id = {k : i for i, k in enumerate("""GEN
 EXO
@@ -217,3 +219,85 @@ class Location(dict):
 
     def testament(self):
         return "new" if self["book"] in NT else "old"
+    
+
+class Bible(dict):
+    def __init__(self, filename):
+        self.filename = filename
+        self.verses = {}
+        self.indices = {}
+        self.loc2idx = {}
+        self.data = []
+        if filename.endswith(".jsonl"):
+            with open(filename, "rt") as ifd:
+                i = 0
+                for line in ifd:
+                    obj = json.loads(line)
+                    loc = Location(obj["location"])
+                    self.verses[loc] = obj["text"]
+                    self.indices[i] = obj["text"]
+                    self.loc2idx[loc] = i
+                    i += 1
+                    self.data.append({"text": obj["text"], "location": loc})
+        elif filename.endswith(".gz"):
+            with gzip.open(filename, "rt") as ifd:
+                i = 0
+                for line in ifd:
+                    obj = json.loads(line)
+                    loc = Location(obj["location"])
+                    self.verses[loc] = obj["text"]
+                    self.indices[i] = obj["text"]
+                    self.loc2idx[loc] = i
+                    i += 1
+                    self.data.append({"text": obj["text"], "location": loc})
+        self.idx2loc = {v: k for k, v in self.loc2idx.items()}
+        # self.idx2loc = {v: k for k, v in self.indices.items()}
+        # self.loc2idx = {k: v for k, v in self.indices.items()}
+    
+    def __getitem__(self, loc):
+        return self.verses[loc]
+    
+    def __contains__(self, loc):
+        return loc in self.verses
+    
+    def __len__(self):
+        return len(self.verses)
+    
+    def __iter__(self):
+        return iter(self.verses)
+    
+    def __repr__(self):
+        return f"Bible({self.filename})"
+    
+    def __str__(self):
+        return f"Bible({self.filename})"
+    
+    def __hash__(self):
+        return hash(repr(self))
+    
+    def __eq__(self, other):
+        return self.filename == other.filename
+    
+    def __ne__(self, other):
+
+        return not self.__eq__(other)
+    
+    def __cmp__(self, other):
+        return self.filename == other.filename
+    
+    def __gt__(self, other):
+        return self.filename > other.filename
+    
+    def __le__(self, other):
+        return self.filename <= other.filename
+    
+    def __lt__(self, other):
+        return self.filename < other.filename
+    
+    def get_index(self, loc):
+        return self.indices[loc]
+    
+    def get_passage(self, start, end, sep):
+        # only want to return the text, not location
+        # join them on sof pasuq, U+05C3
+        return sep.join([self.data[i]["text"] for i in range(start, end)])
