@@ -47,8 +47,8 @@ vars.AddVariables(
         "LANGUAGE_MAP",
         "",
         {
-            "Hebrew" : ("he_IL", "heb_Hebr"),
-            "Greek" : ("el_XX", "ell_Grek"),
+            #"Hebrew" : ("he_IL", "heb_Hebr"),
+            #"Greek" : ("el_XX", "ell_Grek"),
             "English" : ("en_XX", "eng_Latn"),
             #"Japanese" : ("ja_XX", "jpn_Jpan"),
             "Finnish" : ("fi_FI", "fin_Latn"),
