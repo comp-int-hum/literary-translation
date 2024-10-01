@@ -4,7 +4,7 @@ import json
 import argparse
 import nltk
 import iso639
-from transformers import NllbTokenizer, AutoModelForSeq2SeqLM, AutoTokenizer
+from transformers import NllbTokenizer, AutoModelForSeq2SeqLM, AutoTokenizer, AutoModel, M2M100ForConditionalGeneration, M2M100Tokenizer
 from utils import Location
 import stopwordsiso as sw
 import sys
@@ -29,10 +29,26 @@ if __name__ == "__main__":
     args = parser.parse_args()
 
     logging.basicConfig(level=logging.INFO)
+
+    # let's make some model specific processing
+    MAP = {'facebook/m2m100_1.2B': {'model': M2M100ForConditionalGeneration,
+                                    'tokenizer': M2M100Tokenizer},
+           }
+    opt = MAP[args.model]
+    
+    tokenizer = opt['tokenizer'].from_pretrained(args.model)
+    tokenizer.src_lang = args.source_lang
+
+    model = opt['model'].from_pretrained(args.model, load_in_4bit=True)
+    bos_id = tokenizer.get_lang_id(args.target_lang)
+
     # model = "facebook/nllb-200-distilled-600M"
-    tokenizer = AutoTokenizer.from_pretrained(args.model, src_lang=args.source_lang, tgt_lang=args.target_lang)
-    model = AutoModelForSeq2SeqLM.from_pretrained(args.model)
-    model.to(args.device)
+    #tokenizer = AutoTokenizer.from_pretrained(args.model, src_lang=args.source_lang, tgt_lang=args.target_lang)
+    #model = M2M100ForConditionalGeneration.from_pretrained(args.model, load_in_8bit=True)
+    try:
+        model.to(args.device)
+    except:
+        pass
 
     try:
         target_stopwords = set(nltk.corpus.stopwords.words(iso639.find(args.target_lang.split("_")[0])["name"].lower()))
@@ -86,7 +102,7 @@ if __name__ == "__main__":
                 )
                 generated_tokens = model.generate(
                     **encoded,
-                    forced_bos_token_id=tokenizer.lang_code_to_id[args.target_lang],
+                    forced_bos_token_id=bos_id,#tokenizer.lang_code_to_id[args.target_lang],
                     max_length=100,
                     bad_words_ids=bad_token_ids if bad_token_ids else None
                 )
