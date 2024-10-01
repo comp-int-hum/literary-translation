@@ -1,4 +1,4 @@
-# from comet import download_model, load_from_checkpoint
+from comet import download_model, load_from_checkpoint
 import os
 import glob
 from tqdm import tqdm

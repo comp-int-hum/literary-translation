@@ -9,7 +9,6 @@ import re
 import functools
 from glob import glob
 import time
-import imp
 import sys
 import json
 #from steamroller import Environment
@@ -22,9 +21,6 @@ import json
 # hopefully Hale has done some looking into that 
 
 # workaround needed to fix bug with SCons and the pickle module
-del sys.modules['pickle']
-sys.modules['pickle'] = imp.load_module('pickle', *imp.find_module('pickle'))
-import pickle
 
 # actual variable and environment objects
 vars = Variables()
@@ -35,7 +31,7 @@ vars.AddVariables(
     # ("DATA_PATH", "", os.path.expanduser("~/corpora")),
     ("DATA_PATH", "", "data"),
     # ("BIBLE_CORPUS", "", os.path.expanduser("${DATA_PATH}/bible-corpus")),
-    ("BIBLE_CORPUS", "", "${DATA_PATH}/bibles"),
+    ("BIBLE_CORPUS", "", "${DATA_PATH}/bibles2"),
     # ("CROSS_REFERENCE_FILE", "", os.path.expanduser("~/corpora/biblical-cross-references.txt")),
     ("CROSS_REFERENCE_FILE", "", "${DATA_PATH}/biblical-cross-references.txt"),
     # ("STEP_BIBLE_PATH", "", os.path.expanduser("~/corpora/STEPBible-Data/Translators Amalgamated OT+NT")),
@@ -47,14 +43,14 @@ vars.AddVariables(
         "LANGUAGE_MAP",
         "",
         {
-            #"Hebrew" : ("he_IL", "heb_Hebr"),
-            #"Greek" : ("el_XX", "ell_Grek"),
-            "English" : ("en_XX", "eng_Latn"),
+            "Hebrew" : ("he_IL", "heb_Hebr", "he"),
+            "Greek" : ("el_XX", "ell_Grek", "el"),
+            "English" : ("en_XX", "eng_Latn", "en"),
             #"Japanese" : ("ja_XX", "jpn_Jpan"),
-            "Finnish" : ("fi_FI", "fin_Latn"),
-            "Turkish" : ("tr_TR", "tur_Latn"),
-            "Swedish" : ("sv_SE", "swe_Latn"),
-            "Marathi" : ("mr_IN", "mar_Deva")
+            "Finnish" : ("fi_FI", "fin_Latn", "fi"),
+            "Turkish" : ("tr_TR", "tur_Latn", "tr"),
+            "Swedish" : ("sv_SE", "swe_Latn", "sv"),
+            "Marathi" : ("mr_IN", "mar_Deva", "mr"),
         }
     ),
     (
@@ -68,7 +64,7 @@ vars.AddVariables(
     ),
     ("TRANSLATION_LANGUAGES", "", ["English", "Finnish", "Turkish", "Swedish", "Marathi"]), # can remove Japenese "Japanese",
     ("USE_PRECOMPUTED_EMBEDDINGS", "", False),
-    ("MODELS", "", ["intfloat/multilingual-e5-large", "CohereForAI/aya-23-8B"]), #"facebook/nllb-200-distilled-600M", 
+    ("MODELS", "", ["facebook/m2m100_1.2B",]), #"intfloat/multilingual-e5-large",]), #"CohereForAI/aya-23-8B"]), #"facebook/nllb-200-distilled-600M", 
 )
 
 env = Environment(
@@ -109,7 +105,7 @@ env.Decider("timestamp-newer")
 lang_map = env["LANGUAGE_MAP"]
 r_lang_map = {v : k for k, v in lang_map.items()}
 
-
+# HERE WE ARE EMBEDDING HUMAN TRANSLATIONS
 embeddings = {}
 human_translations = {}
 for testament in ["OT", "NT"]:
@@ -148,6 +144,7 @@ for testament in ["OT", "NT"]:
         human_translations[testament][language] = human_trans
 #         embeddings[testament][manuscript][language][condition_name] = emb
 
+# HERE WE EMBED THE ORIGINAL MANUSCRIPTS, THEN PRODUCE TRANSLATIONS AND EMBED THOSE
 for original in env["ORIGINALS"]:
     condition_name = "original"
     original_language = original["language"]
@@ -214,13 +211,13 @@ for original in env["ORIGINALS"]:
         #             DEVICE="cuda"                
         #         )[0]
         #     embeddings[testament][manuscript][other_language]["human_translation"] = emb
-        src_lang = env["LANGUAGE_MAP"][original_language][1]
-        tgt_lang = env["LANGUAGE_MAP"][other_language][1]        
+        src_lang = env["LANGUAGE_MAP"][original_language][2]
+        tgt_lang = env["LANGUAGE_MAP"][other_language][2]        
         human_trans = human_translations[testament][other_language]
         
         for model in env["MODELS"]:
-            print(model)
-            model_name = model.split('/')[1]
+            #print(model)
+            model_name = model.replace('/', '_')
             embeddings[testament][manuscript][other_language][model_name] = embeddings[testament][manuscript][other_language].get(model_name, {})
             for condition_name, inputs, args in [
                     ("unconstrained", orig, {}),
@@ -240,12 +237,12 @@ for original in env["ORIGINALS"]:
                 if env["USE_PRECOMPUTED_EMBEDDINGS"]:
                     emb = tenv.File(
                         renv.subst(
-                            "work/${TESTAMENT}/${MANUSCRIPT}/${CONDITION_NAME}/${MODEL}/${LANGUAGE}-embedded.json.gz"
+                            "work/${TESTAMENT}/${MANUSCRIPT}/${CONDITION_NAME}/${model_name}/${LANGUAGE}-embedded.json.gz"
                         )
                     )
                 else:
                     translation = tenv.TranslateDocument(
-                        "work/${TESTAMENT}/${MANUSCRIPT}/${CONDITION_NAME}/${MODEL}/${LANGUAGE}.json.gz",
+                        "work/${TESTAMENT}/${MANUSCRIPT}/${CONDITION_NAME}/${model_name}/${LANGUAGE}.json.gz",
                         inputs,
                         SRC_LANG=src_lang,
                         TGT_LANG=tgt_lang,
