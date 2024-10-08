@@ -23,13 +23,13 @@ def process_json_line(json_line):
     # Create the new dictionary with the required fields
     if args.lang == "Greek":
         processed_data = {
-            "location": data["eng_ref"],  # Copy the "heb_ref" field as "location"
+            "location": data["eng_ref"].split('(')[0].split('{')[0].split('[')[0],  # Copy the "heb_ref" field as "location"
             "text": remove_accents(data["text"])  # Remove Nikkud from the "line" field and store as "text"
         }
     elif args.lang == "Hebrew":
 
         processed_data = {
-            "location": data["heb_ref"],  # Copy the "heb_ref" field as "location"
+            "location": data["eng_ref"],  # We're going to keep everything consistent by using English references
             "text": remove_nikkud(data["line"], keep_end=True)  # Remove Nikkud from the "line" field and store as "text"
         }
     
@@ -37,7 +37,7 @@ def process_json_line(json_line):
 
 # Main function to process the input JSON file and output a compressed JSON.gz file
 def process_json_file(input_file, output_file, lang):
-    with open(input_file, 'r', encoding='utf-8') as infile, gzip.open(output_file, 'wt', encoding='utf-8') as outfile:
+    with open(input_file, 'r', encoding='utf-8') as infile, open(output_file, 'wt', encoding='utf-8') as outfile:
         # Iterate over each line in the input file
         for line in infile:
             if line.strip():  # Skip empty lines

@@ -17,6 +17,8 @@ stopwordsiso = "^0.6.1"
 sentencepiece = "^0.2.0"
 accelerate = "^0.34.2"
 bitsandbytes = "^0.44.0"
+evaluate = "^0.4.3"
+sacrebleu = "^2.4.3"
 
 
 [build-system]
