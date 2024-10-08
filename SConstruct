@@ -26,7 +26,7 @@ from steamroller import Environment
 vars = Variables()
 
 vars.AddVariables(
-    ("STEAMROLLER_ENGINE", "", "slurm"),
+    ("ENGINE", "", "slurm"),
     ("GPU_ACCOUNT", "", "CAINES-SL3-GPU"),
     ("GPU_QUEUE", "", "ampere"),
     # ("DATA_PATH", "", os.path.expanduser("~/corpora")),
@@ -251,6 +251,7 @@ for original in env["ORIGINALS"]:
                         BATCH_SIZE=1000,
                         DEVICE="cuda",
                         MODEL=model,
+                        STEAMROLLER_ENGINE=env.get("ENGINE", "local"),
                         STEAMROLLER_ACCOUNT=env.get("GPU_ACCOUNT", None),
                         STEAMROLLER_QUEUE=env.get("GPU_QUEUE", None),
                         STEAMROLLER_GPU_COUNT=1,
