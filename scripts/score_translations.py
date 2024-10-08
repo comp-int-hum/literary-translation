@@ -43,11 +43,10 @@ if __name__ == "__main__":
     data = data.dropna()
     print(f"Dropped {len_before-len(data)} rows for which there was no reference.")
     # show the dropped rows
-    pred = " ".join(data["text"])
-    ref = " ".join(data["text_ref"])
+    pred = data["text"]
+    ref = data["text_ref"]
     
     # save this result to a jsonl file
     with open(args.output, "wt") as ofd:
         score = bleu.compute(predictions=pred, references=ref)
         ofd.write(json.dumps(score) + "\n")
-

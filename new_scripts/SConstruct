@@ -1,0 +1,41 @@
+import os
+
+vars = Variables()
+
+vars.AddVariables(
+    ("WORK_DIR", "The directory where the work is done", "work/"),
+    ("DATA_DIR", "The directory where the data is stored", "data/"),
+    ("ALPHA", "threshold for statistical significance", 0.005)
+)
+
+env = Environment(variables=vars,
+                ENV=os.environ,
+                tools=[],
+                BUILDERS={
+                    "ScoreChiasm": Builder(
+                        action="python score_chiasm.py --book ${SOURCE} --output ${TARGET} --group ${LEVEL} --feats ${FEATS}",
+                    ),
+                    "InspectChiasm": Builder(
+                        action="python inspect_chiasm.py --book ${SOURCES[0]} --scores ${SOURCES[1]} --alpha ${ALPHA} --output ${TARGET}"
+                    )
+                }
+)
+
+BOOKS = os.listdir(env["DATA_DIR"])
+
+
+
+for book in ['Gen.jsonl']:
+    for level in ['half', 'verse', 'pesucha', 'setuma']:
+        for feats_combo in [['ngram']]:#, ['ngram', 'neural']]:
+            feats = "_".join(feats_combo)
+            score = env.ScoreChiasm(os.path.join(env["WORK_DIR"], book.split('.jsonl')[0], level,feats, 'scores.pkl'), os.path.join(env['DATA_DIR'], book), 
+                            LEVEL=level, FEATS=feats_combo)
+            out_files = env.InspectChiasm(os.path.join(env["WORK_DIR"], book.split('.jsonl')[0], level,feats, f"{level}_{book.split('.jsonl')[0]}_chiasm.xlsx"),
+                                        [os.path.join(env['DATA_DIR'], book), score])
+            
+
+
+            
+
+        

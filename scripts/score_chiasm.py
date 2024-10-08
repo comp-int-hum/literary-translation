@@ -108,4 +108,3 @@ if __name__ == "__main__":
 
     score_file(args.embeddings, args.output, args.penalty)
     
-

@@ -8,28 +8,25 @@ import os
 import json
 import argparse
 import glob
-import pickle
-import gzip
-from tqdm import tqdm
 from utils import Bible, Location
 
 def load(file):
-    with gzip.open(file, "rb") as ifd:
+    with open(file, "rb") as ifd:
             data = [json.loads(line) for line in ifd]
     return data
 
 
 def create_array(score_files, threshold):
     data = {}
-    for score_file in tqdm(score_files[:2]):
+    for score_file in score_files:
         scores = load(score_file)
         df = pd.DataFrame.from_records(scores)
         df["chiasm_length"] = df["p"].apply(lambda x: 1 if x < threshold else 0)
-        df["chiasm_length"] *= df["n"]
+        df["chiasm_lenth"] *= df["n"]
         # group by i and keep the n with the smallest p-value
         df = df.groupby("i").apply(lambda x: x.loc[x["p"].idxmin()]).reset_index(drop=True)
-        locations = df['start'].apply(lambda x: Location(x))
-        data[score_file] = {'locations': locations, 'lengths': df['chiasm_length'].values.reshape(1,-1)[0]}
+        locations = df['start'].apply(lambda x: Location(x)).values()
+        data[score_file] = list(zip(locations, df['chiasm_length'].values.reshape(1,-1)[0]))
     
     # filepath: (location, chiasm_length_at_location_i)
     return data
@@ -55,10 +52,8 @@ def get_passages_for_inspection(high, array, files, trs, locations):
             
             # j is the index of the file, k is the chiasm size
             file_name = files[translation_idx]
-            file_name = "_".join(file_name.split("/"))
             bible = trs[file_name.split('-chiasm')[0]]
-            verses = locations[starting_pos: starting_pos+chiasm_length+1]
-            print(verses)
+            verses = locations[starting_pos: starting_pos+chiasm_length]
             text = ""
             for verse in verses:
                 text += verse + " "
@@ -96,22 +91,17 @@ if __name__ == "__main__":
     TRANSLATIONS = {}
     for file in args.translations:
         translation = Bible(file)
-        TRANSLATIONS["_".join(file.split("/")).split(".json.gz")[0]] = translation
-    print(TRANSLATIONS.keys())
+        TRANSLATIONS["_".join(file.split("/"))] = translation
+
     data_dict = create_array(args.scores, args.p)
-    # print(data_dict)
     # save dict to a the array output
-    # with open(args.array, "w") as ofd:
-        # json.dump(data_dict, ofd)
+    with open(args.array, "w") as ofd:
+        json.dump(data_dict, ofd)
     # make an array of the second value in the tuple
-    # array = np.array([x[1] for x in data_dict.values()])
-    array = np.asarray([v['lengths'] for _,v in data_dict.items()])
-    locations = np.asarray([v['locations'] for _,v in data_dict.items()])
-    # locations = np.array([x[0] for x in data_dict.values()])
-    files = [k for k,_ in data_dict.items()]
-    print(files)
+    array = np.array([x[1] for x in data_dict.values()])
+    locations = np.array([x[0] for x in data_dict.values()])
+
     high = find_disputed(array, args.n)
 
-    passages = get_passages_for_inspection(high, array, files, TRANSLATIONS, locations)
+    passages = get_passages_for_inspection(high, array, args.scores, TRANSLATIONS, locations)
     passages.to_csv(args.passages, index=False)
-
