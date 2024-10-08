@@ -11,7 +11,7 @@ from glob import glob
 import time
 import sys
 import json
-#from steamroller import Environment
+from steamroller import Environment
 
 # I'm not running this on the grid, so remove everything to do with clusters,
 # need to download the data, it's pretty easy to find where it is
@@ -26,8 +26,9 @@ import json
 vars = Variables()
 
 vars.AddVariables(
-    ("GPU_ACCOUNT", "", None),
-    ("GPU_QUEUE", "", None),
+    ("STEAMROLLER_ENGINE", "", "slurm"),
+    ("GPU_ACCOUNT", "", "CAINES-SL3-GPU"),
+    ("GPU_QUEUE", "", "ampere"),
     # ("DATA_PATH", "", os.path.expanduser("~/corpora")),
     ("DATA_PATH", "", "data"),
     # ("BIBLE_CORPUS", "", os.path.expanduser("${DATA_PATH}/bible-corpus")),
@@ -211,8 +212,8 @@ for original in env["ORIGINALS"]:
         #             DEVICE="cuda"                
         #         )[0]
         #     embeddings[testament][manuscript][other_language]["human_translation"] = emb
-        src_lang = env["LANGUAGE_MAP"][original_language][1]
-        tgt_lang = env["LANGUAGE_MAP"][other_language][1]        
+        src_lang = env["LANGUAGE_MAP"][original_language][2]
+        tgt_lang = env["LANGUAGE_MAP"][other_language][2]        
         human_trans = human_translations[testament][other_language]
         
         for model in env["MODELS"]:
@@ -224,7 +225,7 @@ for original in env["ORIGINALS"]:
                     ("exclude_human", [orig, human_trans], {}),
                     ("exclude_references", orig, {"DISALLOW_REFERENCED" : env["CROSS_REFERENCE_FILE"]}),
                     #("exclude_both", [orig, human_trans], {"DISALLOW_REFERENCED" : env["CROSS_REFERENCE_FILE"]}),
-            ]:
+            ][:1]:
                 tenv = renv.Override(
                     {
                         "TESTAMENT" : testament,
@@ -247,9 +248,14 @@ for original in env["ORIGINALS"]:
                         inputs,
                         SRC_LANG=src_lang,
                         TGT_LANG=tgt_lang,
-                        BATCH_SIZE=256,
+                        BATCH_SIZE=1000,
                         DEVICE="cuda",
                         MODEL=model,
+                        STEAMROLLER_ACCOUNT=env.get("GPU_ACCOUNT", None),
+                        STEAMROLLER_QUEUE=env.get("GPU_QUEUE", None),
+                        STEAMROLLER_GPU_COUNT=1,
+                        STEAMROLLER_MEMORY="32G",
+                        STEAMROLLER_TIME="00:10:00",
                         **args
                     )
 
