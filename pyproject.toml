@@ -1,23 +1,24 @@
 [tool.poetry]
-package-mode=false
 name = "literary-translation"
 version = "0.1.0"
 description = ""
-authors = ["Hope McGovern"]
+authors = ["Hope Speirs"]
 readme = "README.md"
 
 [tool.poetry.dependencies]
-python = "^3.12"
-pandas = "^2.2.2"
-sentence-transformers = "^3.1.0"
-scipy = "^1.14.1"
+python = "^3.10"
+pandas = "^2.2.3"
+numpy = "^2.1.2"
+sentence-transformers = "^3.1.1"
+scikit-learn = "^1.5.2"
 nltk = "^3.9.1"
 iso639 = "^0.1.4"
 stopwordsiso = "^0.6.1"
 sentencepiece = "^0.2.0"
-accelerate = "^0.34.2"
-bitsandbytes = "^0.44.0"
-
+accelerate = "^1.0.0"
+transformers = "^4.45.2"
+huggingface = "^0.0.1"
+torch = "^2.2.2"
 
 [build-system]
 requires = ["poetry-core"]
