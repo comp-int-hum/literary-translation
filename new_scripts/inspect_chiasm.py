@@ -25,9 +25,7 @@ def main(args):
 
     scores = saved_data['scores']
     indices = saved_data['indices']
-    # print(indices[:5])
-    # exit()
-
+    print(indices[:5])
     top_chiasms = []
     vis = {k: 0 for k in [x.book for x in locs]}
     for n, os in scores.items():
@@ -47,7 +45,7 @@ def main(args):
                 text = []
                 heb_text = []
                 for line in indices[i:i+n]:
-                    if type(line[0]) == str:
+                    if 'half' in args.scores:
                         # then we know it's a half-verse processing
                         for idx in line:
                             if 'a' in idx:
@@ -70,13 +68,13 @@ def main(args):
                 top_chiasms.append({"n": n,
                                     "thres": thres,
                                     "refs": "\n".join([str(x) for x in refs]),
-                                    "text": "\n".join([x[0] for x in heb_text]),
+                                    "text": "\n".join([str(x) for x in heb_text]),
                                     "translation": "\n".join([str(x) for x in text])})
-    
-        with open(f"{args.output}.vis", 'wb') as f:
-            pickle.dump(vis, f)
+    print(top_chiasms[0])
+    with open(f"{args.output}.vis", 'wb') as f:
+        pickle.dump(vis, f)
 
-        pd.DataFrame.from_records(top_chiasms).to_excel(args.output)
+    pd.DataFrame.from_records(top_chiasms).to_excel(args.output)
 
 if __name__ == "__main__":
     parser = ap.ArgumentParser()
