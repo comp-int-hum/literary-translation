@@ -21,6 +21,7 @@ evaluate = "^0.4.3"
 sacrebleu = "^2.4.3"
 #torch = "^2.2.2"
 scons = "^4.8.1"
+openpyxl = "^3.1.5"
 
 [build-system]
 requires = ["poetry-core"]
