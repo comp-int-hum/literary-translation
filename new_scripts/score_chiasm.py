@@ -273,7 +273,7 @@ def main(args):
             opt = True
             try:
                 curr_book = locs[indices[i][0]].book
-                for gr in indices[i:i+N]:
+                for gr in indices[i:i+n]:
                     for v in gr:
                         if locs[v].book != curr_book:
                             #print(f"{locs[v].book} does not match {curr_book}, so skipping")
@@ -282,12 +282,11 @@ def main(args):
                         if not opt:
                             break
                 if opt:
-                    os.append(get_chiasm_score(cos_sim, i, n=N))
+                    os.append(get_chiasm_score(cos_sim, i, n=n))
                 else:
                     os.append(0)
             except:
                 os.append(0)
-            os.append(get_chiasm_score(cos_sim, i, n=n))
         scores[n] = os
         
 

@@ -25,8 +25,8 @@ env = Environment(variables=vars,
 # BOOKS = os.listdir(env["DATA_DIR"])
 
 
-for level in ['half', 'verse', 'pesucha', 'setuma']:
-    for feats_combo in [['ngram'],]:#['neural']]:#, ['ngram', 'neural']]:
+for level in ['half', 'verse', 'pesucha',]: #'setuma']:
+    for feats_combo in [['ngram'],['neural']]:#, ['ngram', 'neural']]:
         feats = "_".join(feats_combo)
         score = env.ScoreChiasm(os.path.join(env["WORK_DIR"], level, feats, 'scores.pkl'), env['OT_DATA'], 
                         LEVEL=level, FEATS=feats_combo)
