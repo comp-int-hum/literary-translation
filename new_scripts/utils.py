@@ -11,7 +11,7 @@ ATNACH = '\u0591'  # Unicode for Atnach (half-verse separator)
 PESUCHA = '׃ פ'     # Pesucha separator
 SETUMA = '׃ ס'      # Setuma separator
 
-def group_verses(verses, group_type):
+def old_group_verses(verses, group_type):
     """
     Group verses into half-verses, pesucha, or setuma sections.
     
