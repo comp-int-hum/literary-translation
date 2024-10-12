@@ -21,17 +21,14 @@ def load_json_lines(file_path):
 
 
 def main(args):
-
+    args.src = args.src.replace("_", ' ')
     original = load_json_lines(args.original)
     translation = load_json_lines(args.human_translation)
     # just choose two random locations and look them up in 
     n_examples = 2
     selected_examples = random.sample(list(original.keys()), n_examples)
-    print(selected_examples)
     original_texts = [original[ex] for ex in selected_examples]
-    print(original_texts)
     translated_texts = [translation[ex] if ex in translation else '' for ex in selected_examples]
-    print(translated_texts)
 
 
     # Construct the few-shot translation prompt
