@@ -119,7 +119,10 @@ mapping = {
     "1JN": "1JO",
     "2JN": "2JO",
     "3JN": "3JO",
-    "JUD" : "JDE"
+    "JUD" : "JDE",
+    "EZK": "EZE",
+    "JOL": "JOE",
+    "NAM": "NAH"
 }
 
 

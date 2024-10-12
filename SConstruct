@@ -185,21 +185,21 @@ for original in env["ORIGINALS"]:
     for other_language in env["TRANSLATION_LANGUAGES"]:
         embeddings[testament][manuscript][other_language] = embeddings[testament][manuscript].get(other_language, {})        
         # if "human_translation" not in embeddings[testament][manuscript][other_language]:
-        #     oenv = renv.Override(
-        #         {
-        #             "LANGUAGE" : other_language,
-        #             "CONDITION_NAME" : "human_translation",
-        #             "MANUSCRIPT" : "BC"#.format(original_language)
-        #         }
-        #     )
-        #     if env["USE_PRECOMPUTED_EMBEDDINGS"]:
-        #         emb = oenv.File(renv.subst("work/${TESTAMENT}/${MANUSCRIPT}/${CONDITION_NAME}/${LANGUAGE}-embedded.json.gz"))
-        #     else:
-        #         human_trans = oenv.ConvertFromXML(
-        #             "work/${TESTAMENT}/${MANUSCRIPT}/${CONDITION_NAME}/${LANGUAGE}.json.gz",
-        #             "${BIBLE_CORPUS}/bibles/${LANGUAGE}.xml",
-        #         )
-        #         emb = oenv.EmbedDocument(
+            # oenv = renv.Override(
+                # {
+                    # "LANGUAGE" : other_language,
+                    # "CONDITION_NAME" : "human_translation",
+                    # "MANUSCRIPT" : "BC"#.format(original_language)
+                # }
+            # )
+            # if env["USE_PRECOMPUTED_EMBEDDINGS"]:
+                # emb = oenv.File(renv.subst("work/${TESTAMENT}/${MANUSCRIPT}/${CONDITION_NAME}/${LANGUAGE}-embedded.json.gz"))
+            # else:
+                # human_trans = oenv.ConvertFromXML(
+                    # "work/${TESTAMENT}/${MANUSCRIPT}/${CONDITION_NAME}/${LANGUAGE}.json.gz",
+                    # "${BIBLE_CORPUS}/bibles/${LANGUAGE}.xml",
+                # )
+                # emb = oenv.EmbedDocument(
         #             "work/${TESTAMENT}/${MANUSCRIPT}/${CONDITION_NAME}/${LANGUAGE}-embedded.json.gz",
         #             human_trans,
         #             STEAMROLLER_ACCOUNT=env.get("GPU_ACCOUNT", None),
