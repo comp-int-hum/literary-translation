@@ -241,17 +241,17 @@ for original in env["ORIGINALS"]:
                         )
                     )
                 else: 
-                    
-                    translation = tenv.TranslateDocument(
-                        "work/${TESTAMENT}/${MANUSCRIPT}/${CONDITION_NAME}/${MODEL}/${LANGUAGE}.json.gz",
-                        inputs,
-                        SRC_LANG=src_lang,
-                        TGT_LANG=tgt_lang,
-                        BATCH_SIZE=256,
-                        DEVICE="cuda",
-                        MODEL=model,
-                        **args
-                    )
+                    pass 
+                    # translation = tenv.TranslateDocument(
+                        # "work/${TESTAMENT}/${MANUSCRIPT}/${CONDITION_NAME}/${MODEL}/${LANGUAGE}.json.gz",
+                        # inputs,
+                        # SRC_LANG=src_lang,
+                        # TGT_LANG=tgt_lang,
+                        # BATCH_SIZE=256,
+                        # DEVICE="cuda",
+                        # MODEL=model,
+                        # **args
+                    # )
 
                     # emb = tenv.EmbedDocument(
                     #     "work/${TESTAMENT}/${MANUSCRIPT}/${CONDITION_NAME}/${MODEL}/${LANGUAGE}-embedded.json.gz",
