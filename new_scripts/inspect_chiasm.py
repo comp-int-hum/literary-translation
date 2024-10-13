@@ -7,37 +7,45 @@ import numpy as np
 import pandas as pd
 import json
 import pickle
+from score_chiasm import Location
 
 def main(args):
-    with open(args.book, 'rt') as f:
-        records = [json.loads(line) for line in f]
+    with open(args.input, 'rt', encoding='utf-8') as ifd:
+        OT_data = []
+        for line in ifd:
+            OT_data.append(json.loads(line))
     
-    df = pd.DataFrame.from_records(records)
+    df = pd.DataFrame.from_records(OT_data)
+    # texts = df['line'].tolist()
+    # translations = df['translation'].tolist()
+    locs = [Location(x) for x in df['heb_ref'].tolist()]
 
     with open(args.scores, 'rb') as f:
         saved_data = pickle.load(f)
-    if 'dummy' in saved_data.keys():
-        # make a dummy output
-        print("Detected dummy input, skipping...")
-        with open(args.output, 'wt') as f:
-            pass
-        exit()
 
     scores = saved_data['scores']
-    #null_scores = saved_data['null_scores']
     indices = saved_data['indices']
-
-    ss_chiasms = []
-    for n_val, os in scores.items():
+    print(indices[:5])
+    top_chiasms = []
+    vis = {k: 0 for k in [x.book for x in locs]}
+    for n, os in scores.items():
+        thres = np.mean(os) + 2*np.std(os)
+        
         for i, o in enumerate(os):
-            # if the percentage of >50% of the lines are similar enough
-            if o > 0.5:
+            if o > thres:
+                try:
+                    book = locs[indices[i][0]].book
+                    vis[book] +=1
+                except:
+                    pass
+                    # print(indices[i][0])
+                    # book = locs[int(indices[i][0][:-1])].book
+                 
                 refs=[]
                 text = []
                 heb_text = []
-                #print(indices[i:i+n_val])
-                for line in indices[i:i+n_val]:
-                    if type(line[0]) == str:
+                for line in indices[i:i+n]:
+                    if 'half' in args.scores:
                         # then we know it's a half-verse processing
                         for idx in line:
                             if 'a' in idx:
@@ -57,50 +65,21 @@ def main(args):
                         text.append([df['translation'].tolist()[idx] for idx in line])
                         heb_text.append([df['line'].tolist()[idx] for idx in line])
                 
-                ss_chiasms.append({"refs": "\n".join([str(x) for x in refs]),
-                                "text": "\n".join([str(x) for x in heb_text]),
-                                "translation": "\n".join([str(x) for x in text])})
-    # ss_chiasms = []
-    # for n_val, scores in scores.items(): # for each value of n
-    #     n_scores = null_scores[n_val] # need to test each observed score against null distribution
-    #     p_values = np.array([np.mean(n_scores >= obs_score) for obs_score in scores])
-    #     for i, p_val in enumerate(p_values):
-    #         if p_val < args.alpha:
-    #             refs=[]
-    #             text = []
-    #             heb_text = []
-    #             for line in indices[i:i+n_val]:
-    #                 if type(line[0]) == str:
-    #                     # then we know it's a half-verse processing
-    #                     for idx in line:
-    #                         if 'a' in idx:
-    #                             refs.append(df['heb_ref'].iloc[int(idx[:-1])])
-    #                             text.append(df['trans_a'].iloc[int(idx[:-1])])
-    #                             heb_text.append(df['half_a'].iloc[int(idx[:-1])])
-    #                         elif 'b' in idx:
-    #                             refs.append(df['heb_ref'].iloc[int(idx[:-1])])
-    #                             text.append(df['trans_b'].iloc[int(idx[:-1])])
-    #                             heb_text.append(df['half_b'].iloc[int(idx[:-1])])
-    #                         else:
-    #                             refs.append(df['heb_ref'].iloc[int(idx)])
-    #                             text.append(df['translation'].iloc[int(idx)])
-    #                             heb_text.append(df['line'].iloc[int(idx)])
-    #                 else:
-    #                     refs.extend([df['heb_ref'].iloc[idx] for idx in line])
-    #                     text.extend([df['translation'].iloc[idx] for idx in line])
-    #                     heb_text.extend([df['line'].iloc[idx] for idx in line])
- 
-    #             ss_chiasms.append({"refs": "\n".join(refs),
-    #                             "text": "\n".join(heb_text),
-    #                             "translation": "\n".join(text)})
+                top_chiasms.append({"n": n,
+                                    "thres": thres,
+                                    "refs": "\n".join([str(x) for x in refs]),
+                                    "text": "\n".join([str(x) for x in heb_text]),
+                                    "translation": "\n".join([str(x) for x in text])})
+    print(top_chiasms[0])
+    with open(f"{args.output}.vis", 'wb') as f:
+        pickle.dump(vis, f)
 
-    pd.DataFrame.from_records(ss_chiasms).to_excel(args.output)
+    pd.DataFrame.from_records(top_chiasms).to_excel(args.output)
 
 if __name__ == "__main__":
     parser = ap.ArgumentParser()
-    parser.add_argument("--book", type=str)
+    parser.add_argument("--input", type=str)
     parser.add_argument("--scores", type=str)
-    parser.add_argument("--alpha", type=float)
     parser.add_argument("--output", type=str)
 
 

@@ -36,21 +36,21 @@ vars.AddVariables(
     ("CROSS_REFERENCE_FILE", "", "${DATA_PATH}/biblical-cross-references.txt"),
     # ("STEP_BIBLE_PATH", "", os.path.expanduser("~/corpora/STEPBible-Data/Translators Amalgamated OT+NT")),
     ("STEP_BIBLE_PATH", "", "${DATA_PATH}/STEP"),
-    ("DEVICE", "", "cpu"),
+    ("DEVICE", "", "cuda"),
     ("BATCH_SIZE", "", 50),
     ("VOTE_THRESHOLD", "", 50),
     (
         "LANGUAGE_MAP",
         "",
         {
-            "Hebrew" : ("he_IL", "heb_Hebr", "he"),
-            "Greek" : ("el_XX", "ell_Grek", "el"),
-            "English" : ("en_XX", "eng_Latn", "en"),
+            "Hebrew" : ("he_IL", "heb_Hebr", "he", "Ancient_Hebrew"),
+            "Greek" : ("el_XX", "ell_Grek", "el", "Ancient_Greek"),
+            "English" : ("en_XX", "eng_Latn", "en", "English"),
             #"Japanese" : ("ja_XX", "jpn_Jpan"),
-            "Finnish" : ("fi_FI", "fin_Latn", "fi"),
-            "Turkish" : ("tr_TR", "tur_Latn", "tr"),
-            "Swedish" : ("sv_SE", "swe_Latn", "sv"),
-            "Marathi" : ("mr_IN", "mar_Deva", "mr"),
+            "Finnish" : ("fi_FI", "fin_Latn", "fi", "Finnish"),
+            "Turkish" : ("tr_TR", "tur_Latn", "tr", "Turkish"),
+            "Swedish" : ("sv_SE", "swe_Latn", "sv", "Swedish"),
+            "Marathi" : ("mr_IN", "mar_Deva", "mr", "Marathi"),
         }
     ),
     (
@@ -62,9 +62,9 @@ vars.AddVariables(
             {"testament" : "OT", "language" : "Hebrew", "form" : "STEP", "file" : "${STEP_BIBLE_PATH}/OT_aligned.json", "manuscript" : "TAHOT"},
         ]
     ),
-    ("TRANSLATION_LANGUAGES", "", ["English", "Finnish", "Turkish", "Swedish", "Marathi"]), # can remove Japenese "Japanese",
+    ("TRANSLATION_LANGUAGES", "", ["English", ]),#"Finnish", "Turkish", "Swedish", "Marathi"]), # can remove Japenese "Japanese",
     ("USE_PRECOMPUTED_EMBEDDINGS", "", False),
-    ("MODELS", "", ["facebook/m2m100_1.2B",]), #"intfloat/multilingual-e5-large",]), #"CohereForAI/aya-23-8B"]), #"facebook/nllb-200-distilled-600M", 
+    ("MODELS", "", ["CohereForAI/aya-23-8B"]),#"facebook/m2m100_1.2B",]), #"CohereForAI/aya-23-8B"]), #"facebook/nllb-200-distilled-600M", 
 )
 
 env = Environment(
@@ -87,8 +87,14 @@ env = Environment(
         "EmbedDocument" : Builder(
             action="python scripts/embed_document.py --input ${SOURCES[0]} --device ${DEVICE} --output ${TARGETS[0]} --batch_size ${BATCH_SIZE}"
         ),
+        # "TranslateDocument" : Builder(
+        #     action="python scripts/translate_document.py --input ${SOURCES[0]} --output ${TARGETS[0]} --model ${MODEL} --source_lang ${SRC_LANG} --target_lang ${TGT_LANG} --device ${DEVICE} --batch_size ${BATCH_SIZE} ${'--disallow_referenced ' + DISALLOW_REFERENCED if DISALLOW_REFERENCED else ''} ${'--vote_threshold ' + str(VOTE_THRESHOLD) if VOTE_THRESHOLD else ''} ${'--disallow_target ' + SOURCES[1].rstr() if len(SOURCES) == 2 else ''}"
+        # ),
+        "MakePrompt": Builder(
+            action="python scripts/make_prompt.py --original ${SOURCES[0]} --human_translation ${SOURCES[1]} --src ${SRC_LANG} --tgt ${TGT_LANG} --output ${TARGET}"
+        ),
         "TranslateDocument" : Builder(
-            action="python scripts/translate_document.py --input ${SOURCES[0]} --output ${TARGETS[0]} --model ${MODEL} --source_lang ${SRC_LANG} --target_lang ${TGT_LANG} --device ${DEVICE} --batch_size ${BATCH_SIZE} ${'--disallow_referenced ' + DISALLOW_REFERENCED if DISALLOW_REFERENCED else ''} ${'--vote_threshold ' + str(VOTE_THRESHOLD) if VOTE_THRESHOLD else ''} ${'--disallow_target ' + SOURCES[1].rstr() if len(SOURCES) == 2 else ''}"
+            action="python scripts/translate_document_aya.py --input ${SOURCES[0]} --output ${TARGETS[0]} --prompt ${PROMPT} --model ${MODEL} --source_lang ${SRC_LANG} --target_lang ${TGT_LANG} --device ${DEVICE} --batch_size ${BATCH_SIZE} ${'--disallow_referenced ' + DISALLOW_REFERENCED if DISALLOW_REFERENCED else ''} ${'--vote_threshold ' + str(VOTE_THRESHOLD) if VOTE_THRESHOLD else ''} ${'--disallow_target ' + SOURCES[1].rstr() if len(SOURCES) == 2 else ''}"
         ),
         # "ScoreEmbeddings" : Builder(
         #     action="python scripts/score_embeddings.py --gold ${SOURCES[0]} --embeddings ${SOURCES[1]} --output ${TARGETS[0]} --vote_threshold ${VOTE_THRESHOLD} --testament ${TESTAMENT} --language ${LANGUAGE} --condition ${CONDITION_NAME} --random_seed ${RANDOM_SEED} --manuscript ${MANUSCRIPT}"
@@ -174,46 +180,24 @@ for original in env["ORIGINALS"]:
                 LANGUAGE=original_language
             )
         
-        orig_emb = renv.EmbedDocument(
-            "work/${TESTAMENT}/${MANUSCRIPT}/${CONDITION_NAME}/${LANGUAGE}-embedded.json.gz",
-            orig,
-            BATCH_SIZE=1000,
-            DEVICE="cuda"            
-        )[0]
-    embeddings[testament][manuscript][original_language][condition_name] = orig_emb
-
+        #orig_emb = renv.EmbedDocument(
+        #    "work/${TESTAMENT}/${MANUSCRIPT}/${CONDITION_NAME}/${LANGUAGE}-embedded.json.gz",
+        #    orig,
+        #    BATCH_SIZE=1000,
+        #    DEVICE="cuda"            
+        #)[0]
+    #embeddings[testament][manuscript][original_language][condition_name] = orig_emb
+    #exit()
     for other_language in env["TRANSLATION_LANGUAGES"]:
         embeddings[testament][manuscript][other_language] = embeddings[testament][manuscript].get(other_language, {})        
-        # if "human_translation" not in embeddings[testament][manuscript][other_language]:
-        #     oenv = renv.Override(
-        #         {
-        #             "LANGUAGE" : other_language,
-        #             "CONDITION_NAME" : "human_translation",
-        #             "MANUSCRIPT" : "BC"#.format(original_language)
-        #         }
-        #     )
-        #     if env["USE_PRECOMPUTED_EMBEDDINGS"]:
-        #         emb = oenv.File(renv.subst("work/${TESTAMENT}/${MANUSCRIPT}/${CONDITION_NAME}/${LANGUAGE}-embedded.json.gz"))
-        #     else:
-        #         human_trans = oenv.ConvertFromXML(
-        #             "work/${TESTAMENT}/${MANUSCRIPT}/${CONDITION_NAME}/${LANGUAGE}.json.gz",
-        #             "${BIBLE_CORPUS}/bibles/${LANGUAGE}.xml",
-        #         )
-        #         emb = oenv.EmbedDocument(
-        #             "work/${TESTAMENT}/${MANUSCRIPT}/${CONDITION_NAME}/${LANGUAGE}-embedded.json.gz",
-        #             human_trans,
-        #             STEAMROLLER_ACCOUNT=env.get("GPU_ACCOUNT", None),
-        #             STEAMROLLER_QUEUE=env.get("GPU_QUEUE", None),
-        #             BATCH_SIZE=1000,
-        #             STEAMROLLER_GPU_COUNT=1,
-        #             STEAMROLLER_MEMORY="32G",
-        #             STEAMROLLER_TIME="00:30:00",
-        #             DEVICE="cuda"                
-        #         )[0]
-        #     embeddings[testament][manuscript][other_language]["human_translation"] = emb
-        src_lang = env["LANGUAGE_MAP"][original_language][2]
-        tgt_lang = env["LANGUAGE_MAP"][other_language][2]        
+        src_lang = env["LANGUAGE_MAP"][original_language][3]
+        tgt_lang = env["LANGUAGE_MAP"][other_language][3]        
         human_trans = human_translations[testament][other_language]
+        # here we will make a prompt 
+        prompt = env.MakePrompt(os.path.join("work", renv["TESTAMENT"], renv["MANUSCRIPT"], tgt_lang + ".txt"),
+                                [orig, human_trans],
+                                SRC_LANG=f"{src_lang}", 
+                                TGT_LANG=tgt_lang)
         
         for model in env["MODELS"]:
             #print(model)
@@ -237,13 +221,14 @@ for original in env["ORIGINALS"]:
                 if env["USE_PRECOMPUTED_EMBEDDINGS"]:
                     emb = tenv.File(
                         renv.subst(
-                            "work/${TESTAMENT}/${MANUSCRIPT}/${CONDITION_NAME}/${model_name}/${LANGUAGE}-embedded.json.gz"
+                            "work/${TESTAMENT}/${MANUSCRIPT}/${CONDITION_NAME}/${MODEL}/${LANGUAGE}-embedded.json.gz"
                         )
                     )
-                else:
+                else: 
                     translation = tenv.TranslateDocument(
-                        "work/${TESTAMENT}/${MANUSCRIPT}/${CONDITION_NAME}/${model_name}/${LANGUAGE}.json.gz",
+                        "work/${TESTAMENT}/${MANUSCRIPT}/${CONDITION_NAME}/${MODEL}/${LANGUAGE}.json.gz",
                         inputs,
+                        PROMPT=prompt,
                         SRC_LANG=src_lang,
                         TGT_LANG=tgt_lang,
                         BATCH_SIZE=256,

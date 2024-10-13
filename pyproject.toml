@@ -1,14 +1,15 @@
 [tool.poetry]
 name = "literary-translation"
+package-mode = false
 version = "0.1.0"
 description = ""
 authors = ["Hope Speirs"]
 readme = "README.md"
 
 [tool.poetry.dependencies]
-python = "^3.10"
-pandas = "^2.2.3"
-numpy = "^2.1.2"
+python = ">=3.9,<3.13"
+pandas = "2.1"
+numpy = "1.26"
 sentence-transformers = "^3.1.1"
 scikit-learn = "^1.5.2"
 nltk = "^3.9.1"
@@ -18,7 +19,13 @@ sentencepiece = "^0.2.0"
 accelerate = "^1.0.0"
 transformers = "^4.45.2"
 huggingface = "^0.0.1"
-torch = "^2.2.2"
+torch = "2.2"
+matplotlib = "^3.9.2"
+seaborn = "^0.13.2"
+scons = "^4.8.1"
+openpyxl = "^3.1.5"
+
+
 
 [build-system]
 requires = ["poetry-core"]

@@ -112,8 +112,17 @@ mapping = {
     "PHIL" : "PHP",
     "PHLM" : "PHM",    
     "SON" : "SOS",
+    "MRK": "MAR",
+    "JHN": "JOH",
+    "SNG": "SOS",
     "PHI" : "PHP",
-    "JUD" : "JDE"
+    "1JN": "1JO",
+    "2JN": "2JO",
+    "3JN": "3JO",
+    "JUD" : "JDE",
+    "EZK": "EZE",
+    "JOL": "JOE",
+    "NAM": "NAH"
 }
 
 
@@ -218,7 +227,7 @@ class Location(dict):
         return hash(repr(self))
 
     def testament(self):
-        return "new" if self["book"] in NT else "old"
+        return "NT" if self["book"] in NT else "OT"
     
 
 class Bible(dict):
