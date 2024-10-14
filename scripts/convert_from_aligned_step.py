@@ -24,13 +24,13 @@ def process_json_line(json_line):
     if args.lang == "Greek":
         processed_data = {
             "location": data["eng_ref"].split('(')[0].split('{')[0].split('[')[0],  # Copy the "heb_ref" field as "location"
-            "text": remove_accents(data["text"])  # Remove Nikkud from the "line" field and store as "text"
+            "text": data["text"] # Remove Nikkud from the "line" field and store as "text"
         }
     elif args.lang == "Hebrew":
 
         processed_data = {
             "location": data["eng_ref"],  # We're going to keep everything consistent by using English references
-            "text": remove_nikkud(data["line"], keep_end=True)  # Remove Nikkud from the "line" field and store as "text"
+            "text": data["line"]  # Remove Nikkud from the "line" field and store as "text"
         }
     
     return processed_data

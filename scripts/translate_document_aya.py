@@ -38,9 +38,7 @@ if __name__ == "__main__":
     # load the prompt
     with open(args.prompt, 'rt') as f:
         prompt = f.readlines()
-    print(prompt)
-    print(make_input_example(prompt, "בְּרֵאשִׁ֖ית בָּרָ֣א אֱלֹהִ֑ים אֵ֥ת הַשָּׁמַ֖יִם וְאֵ֥ת הָאָֽרֶץ׃"))
-    exit()
+        prompt = "".join(prompt)
 
     # load model in 4-bit
     quantization_config = BitsAndBytesConfig(
@@ -49,17 +47,24 @@ if __name__ == "__main__":
     )
     
     tokenizer = AutoTokenizer.from_pretrained(args.model, add_prefix_space=True)
-    model = AutoModelForCausalLM.from_pretrained(args.model, quantization_config=quantization_config)
-    model = model.to_bettertransformer()
+    model = AutoModelForCausalLM.from_pretrained(args.model, quantization_config=quantization_config,)
+                                                 #attn_implementation="flash_attention_2")
+    # model = model.to_bettertransformer()
 
     # model = AutoModelForCausalLM.from_pretrained(args.model,
     #                                              torch_dtype=torch.bfloat16,
     #                                              attn_implementation="flash_attention_2")
-
+    MAP= {
+        "English": "eng",
+        "Finnish": "fin",
+        "Turkish": "tur",
+        "Swedish": "swe",
+        "Marathi": "mar"
+    }
     try:
-        target_stopwords = set(nltk.corpus.stopwords.words(iso639.find(args.target_lang.split("_")[0])["name"].lower()))
+        target_stopwords = set(nltk.corpus.stopwords.words(iso639.find(MAP[args.target_lang].split("_")[0])["name"].lower()))
     except:
-        target_stopwords = set(sw.stopwords(iso639.find(args.target_lang.split("_")[0])["iso639_1"]))
+        target_stopwords = set(sw.stopwords(iso639.find(MAP[args.target_lang].split("_")[0])["iso639_1"]))
 
     disallow = {}
     if args.disallow_target:
@@ -86,8 +91,7 @@ if __name__ == "__main__":
                     if int(votes) > args.vote_threshold:
                         back_references[tgt].add(src)
 
-    with torch.backends.cuda.sdp_kernel(enable_flash=True, enable_math=False, enable_mem_efficient=False):
-        with open(args.input, "rt") as ifd, open(args.output, "wt") as ofd:
+    with open(args.input, "rt") as ifd, open(args.output, "wt") as ofd:
             batch = []
             for i, line in enumerate(ifd):
                 item = json.loads(line)
@@ -138,6 +142,10 @@ if __name__ == "__main__":
                         ofd.write(json.dumps({"location" : location, "text" : trans}) + "\n")
                     batch = []
                     logger.info("Processed %d sentences", i + 1)
+
+                # sanity checking:
+                if i >= 500:
+                    break
 
             if len(batch) > 0:
                 encoded = tokenizer([t for _, t in batch], return_tensors="pt", padding=True)
