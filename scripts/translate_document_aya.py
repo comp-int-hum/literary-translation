@@ -9,6 +9,7 @@ from utils import Location
 import stopwordsiso as sw
 import sys
 import torch
+from tqdm import tqdm
 
 logger = logging.getLogger("translate_document")
 
@@ -91,20 +92,25 @@ if __name__ == "__main__":
                     if int(votes) > args.vote_threshold:
                         back_references[tgt].add(src)
 
-    with open(args.input, "rt") as ifd, open(args.output, "wt") as ofd:
-            batch = []
-            for i, line in enumerate(ifd):
-                item = json.loads(line)
-                
-                try:
-                    batch.append((Location(item["location"]), make_input_example(prompt, item["text"])))
-                except:
-                    print(item)
-                    exit()
-                if len(batch) == args.batch_size:
-                    encoded = tokenizer([t for _, t in batch], return_tensors="pt", padding=True)
-                    encoded.to(args.device)
-                    bad_token_ids = sum(
+    
+    with open(args.input, "rt") as ifd:#, #open(args.output, "wt") as ofd:
+        all_lines = []
+        for i, line in enumerate(ifd):
+            item = json.loads(line)
+            all_lines.append((Location(item["location"]), make_input_example(prompt, item["text"])))
+
+
+
+    with open(args.output, "wt") as ofd:
+        batch = []
+        for i, line in enumerate(tqdm(all_lines)):
+            batch.append(line)
+
+
+            if len(batch) == args.batch_size:
+                encoded = tokenizer([t for _, t in batch], return_tensors="pt", padding=True)
+                encoded.to(args.device)
+                bad_token_ids = sum(
                         [
                             
                             [
@@ -116,19 +122,20 @@ if __name__ == "__main__":
                         ],
                         []
                     )
-                    generated_tokens = model.generate(
+                generated_tokens = model.generate(
                         **encoded,
                         max_new_tokens=100,
                         bad_words_ids=bad_token_ids if bad_token_ids else None,
                         num_return_sequences = 1,
                         repetition_penalty = 1.1
                     )
-                    translations = tokenizer.batch_decode(generated_tokens, skip_special_tokens=True)
-                    for (location, text), trans in zip(batch, translations):
+                translations = tokenizer.batch_decode(generated_tokens, skip_special_tokens=True)
+                print(translations[0], [l for l, _ in batch][0])
+                for (location, text), trans in zip(batch, translations):
 
-                        toks = trans.split()
-                        if args.disallow_referenced:
-                            previous_translations[location] = sum(
+                    toks = trans.split()
+                    if args.disallow_referenced:
+                        previous_translations[location] = sum(
                                 [
                                     [
                                         tokenizer([w.lower()], add_special_tokens=False).input_ids[0],
@@ -138,16 +145,13 @@ if __name__ == "__main__":
                                 []
                             )
                             
-                                        
-                        ofd.write(json.dumps({"location" : location, "text" : trans}) + "\n")
-                    batch = []
-                    logger.info("Processed %d sentences", i + 1)
+                    #print(trans)        
+                    ofd.write(json.dumps({"location" : location, "text" : trans}, ensure_ascii=False) + "\n")
+                batch = []
+                logger.info("Processed %d sentences", i + 1)
 
                 # sanity checking:
-                if i >= 500:
-                    break
-
-            if len(batch) > 0:
+        if len(batch) > 0:
                 encoded = tokenizer([t for _, t in batch], return_tensors="pt", padding=True)
                 encoded.to(args.device)
                 bad_token_ids = sum(
@@ -170,5 +174,5 @@ if __name__ == "__main__":
                     )
                 toks = tokenizer.batch_decode(generated_tokens, skip_special_tokens=True)
                 for (location, text), trans in zip(batch, toks):
-                    ofd.write(json.dumps({"location" : location, "text" : trans}) + "\n")
+                    ofd.write(json.dumps({"location" : location, "text" : trans}, ensure_ascii=False) + "\n")
                 logger.info("Processed %d sentences", i + 1 + len(batch))

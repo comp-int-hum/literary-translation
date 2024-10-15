@@ -25,7 +25,7 @@ def main(args):
     original = load_json_lines(args.original)
     translation = load_json_lines(args.human_translation)
     # just choose two random locations and look them up in 
-    n_examples = 2
+    n_examples = 4
     selected_examples = random.sample(list(original.keys()), n_examples)
     original_texts = [original[ex] for ex in selected_examples]
     translated_texts = [translation[ex] if ex in translation else '' for ex in selected_examples]

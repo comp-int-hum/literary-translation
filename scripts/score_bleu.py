@@ -30,6 +30,9 @@ def main(predictions_file, references_file):
             aligned_preds.append(predictions[location])
             aligned_refs.append(references[location])
     print(len(aligned_refs), len(aligned_preds))
+    print(aligned_refs[:5], aligned_preds[:5])
+    nones = [a for a in aligned_preds if a is None]
+    print(nones)
     #print(aligned_preds[0])
     #print(aligned_refs[0])
     # Calculate the BLEU score using sacrebleu

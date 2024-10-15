@@ -8,6 +8,7 @@ from transformers import NllbTokenizer, AutoModelForSeq2SeqLM, AutoTokenizer, Au
 from utils import Location
 import stopwordsiso as sw
 import sys
+from tqdm import tqdm
 
 logger = logging.getLogger("translate_document")
 
@@ -33,7 +34,7 @@ if __name__ == "__main__":
     # let's make some model specific processing
     MAP = {'facebook/m2m100_1.2B': {'model': M2M100ForConditionalGeneration,
                                     'tokenizer': M2M100Tokenizer},
-           'facebook/nllb-200-distilled-600M': {'model': AutoModelForSeq2SeqLM,
+           'facebook/nllb-200-3.3B': {'model': AutoModelForSeq2SeqLM,
                                                 'tokenizer': NllbTokenizer}
            }
     opt = MAP[args.model]
@@ -45,12 +46,12 @@ if __name__ == "__main__":
         model = opt['model'].from_pretrained(args.model, load_in_4bit=True)
         bos_id = tokenizer.get_lang_id(args.target_lang)
 
-    elif args.model == 'facebook/nllb-200-distilled-600M':
-        model = opt['model'].from_pretrained(args.model)
+    elif args.model == 'facebook/nllb-200-3.3B':
+        model = opt['model'].from_pretrained(args.model, load_in_8bit=True)
         tokenizer = opt['tokenizer'].from_pretrained(args.model, src_lang=args.source_lang, tgt_lang=args.target_lang
                                                      )
     else:
-        raise Error, f"model f{model} not recognized. You might need to add model-specific loading logic."
+        raise Error(f"model f{model} not recognized. You might need to add model-specific loading logic.")
     #model = M2M100ForConditionalGeneration.from_pretrained(args.model, load_in_8bit=True)
     try:
         model.to(args.device)
@@ -87,15 +88,26 @@ if __name__ == "__main__":
                     if int(votes) > args.vote_threshold:
                         back_references[tgt].add(src)
 
-    with open(args.input, "rt") as ifd, open(args.output, "wt") as ofd:
-        batch = []
+    with open(args.input, "rt") as ifd:#, #open(args.output, "wt") as ofd:
+        all_lines = []
         for i, line in enumerate(ifd):
             item = json.loads(line)
-            try:
-                batch.append((Location(item["location"]), item["text"]))
-            except:
-                print(item)
-                exit()
+            all_lines.append((Location(item["location"]), item["text"]))
+
+
+
+    # with open(args.input, "rt") as ifd, open(args.output, "wt") as ofd:
+        
+    with open(args.output, "wt") as ofd:
+        batch = []
+        for i, line in enumerate(tqdm(all_lines)):
+            batch.append(line)
+            # item = json.loads(line)
+            # try:
+            #     batch.append((Location(item["location"]), item["text"]))
+            # except:
+            #     print(item)
+            #     exit()
             if len(batch) == args.batch_size:
                 encoded = tokenizer([t for _, t in batch], return_tensors="pt", padding=True)
                 encoded.to(args.device)

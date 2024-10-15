@@ -6,7 +6,7 @@ vars.AddVariables(
     ("WORK_DIR", "The directory where the work is done", "work/"),
     ("DATA_DIR", "The directory where the data is stored", "../data/"),
     ("N_LIST", " ", [4,5]),
-    ("OT_DATA", "", "${DATA_DIR}/STEP/OT_aligned_sep.json")
+    ("OT_DATA", "", "${DATA_DIR}/STEP/OT_aligned.json")
 )
 
 env = Environment(variables=vars,
@@ -17,21 +17,28 @@ env = Environment(variables=vars,
                         action="python score_chiasm.py --input ${SOURCE} --output ${TARGET} --group ${LEVEL} --feats ${FEATS}",
                     ),
                     "InspectChiasm": Builder(
-                        action="python inspect_chiasm.py --input ${SOURCES[0]} --scores ${SOURCES[1]}  --output ${TARGET}"
+                        action="python inspect_chiasm.py --input ${SOURCES[0]} --scores ${SOURCES[1]}  --output ${TARGET} --subset ${SUBSET}"
                     )
-                }
+                 }
 )
 
 # BOOKS = os.listdir(env["DATA_DIR"])
 
 
-for level in ['half', 'verse', 'pesucha',]: #'setuma']:
-    for feats_combo in [['ngram'],['neural']]:#, ['ngram', 'neural']]:
+for level in ['half', 'verse',]:# 'pesucha','setuma']:
+    if level == 'verse' or level == 'half':
+        subset = 25
+    else:
+        subset = 10
+    for feats_combo in [['neural'],]:#['neural']]:#, ['ngram', 'neural']]:
         feats = "_".join(feats_combo)
-        score = env.ScoreChiasm(os.path.join(env["WORK_DIR"], level, feats, 'scores.pkl'), env['OT_DATA'], 
-                        LEVEL=level, FEATS=feats_combo)
+        # score = env.ScoreChiasm(os.path.join(env["WORK_DIR"], level, feats, 'scores.pkl'), env['OT_DATA'], 
+        #                 LEVEL=level, FEATS=feats_combo)
+        score = env.File(os.path.join(env["WORK_DIR"], level, feats, 'scores.pkl'))
+        #score = env.File(os.path.jon)
         out_files = env.InspectChiasm(os.path.join(env["WORK_DIR"], f"{level}_{feats}_chiasm.xlsx"),
-                                    [env['OT_DATA'], score])
+                                    [env['OT_DATA'], score],
+                                      SUBSET=subset)
         
 
 

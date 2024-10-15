@@ -8,14 +8,13 @@ readme = "README.md"
 
 [tool.poetry.dependencies]
 python = ">=3.9,<3.13"
-pandas = "2.1"
 numpy = "1.26"
 sentence-transformers = "^3.1.1"
 scikit-learn = "^1.5.2"
 nltk = "^3.9.1"
 iso639 = "^0.1.4"
 stopwordsiso = "^0.6.1"
-sentencepiece = "^0.2.0"
+sentencepiece = "^0.1.0"
 accelerate = "^1.0.0"
 transformers = "^4.45.2"
 huggingface = "^0.0.1"
@@ -24,6 +23,9 @@ matplotlib = "^3.9.2"
 seaborn = "^0.13.2"
 scons = "^4.8.1"
 openpyxl = "^3.1.5"
+unbabel-comet = "^2.2.2"
+evaluate = "^0.4.3"
+bitsandbytes = "^0.44.1"
 
 
 

@@ -192,7 +192,7 @@ def get_feature_matrix(texts: list, features: list):
         tokenizer=hebrew_word_tokenizer,
         analyzer='word',             # Analyze at word-level
         stop_words=stops,              # No stop words by default (can add Hebrew stop words if necessary)
-        max_features= 5000
+        max_features = 5000
     )
 
     # Create a FeatureUnion to combine the n-gram features and neural embeddings
@@ -214,7 +214,10 @@ def get_feature_matrix(texts: list, features: list):
 
     # Transform to get the combined feature matrix
     combined_matrix = combined_features.fit_transform(texts)
-
+    if 'ngram' in features:
+        combined_matrix = combined_matrix.toarray()
+        scaler = StandardScaler()
+        combined_matrix = scaler.fit_transform(combined_matrix)
     # Normalize the combined features
     if len(features) > 1:
         combined_matrix = normalize(combined_matrix)
@@ -223,20 +226,21 @@ def get_feature_matrix(texts: list, features: list):
 
 ############# Chiasm Score ################
 
-def get_chiasm_score(cos_sim, i, n, sim_threshold=0.9):
+def get_chiasm_score(cos_sim, i, n, sim_threshold=0.9, penalty=0.1):
     # the basic chiasm score is the sum of the reversed diagonal elements of the cosine similarity matrix
     chiasm = cos_sim[i:i+n, i:i+n]
 
     # now reverse the diagonal
-    chiasm = np.fliplr(chiasm)
-    els = np.diagonal(chiasm)[:n//2]
-  
-    score = np.mean(els)
-    for j in range(1,n):
-        if cos_sim[i+j, i+n-1-j] > sim_threshold:
-            score -= cos_sim[i+j, i+n-1-j]
+    chiasm = np.fliplr(np.triu(chiasm))
+    pairs = np.diagonal(chiasm)[:n//2]
 
-    return score
+    non_pairs = np.sum(chiasm) - np.sum(pairs) - np.sum(np.identity(n))
+
+    avg_pairs = np.sum(pairs)/(n//2)
+    avg_nonpairs = non_pairs/(n*(n-2)//2)
+
+
+    return (avg_pairs-avg_nonpairs), (pairs, avg_nonpairs)
 
 def main(args):
     # STEPS:
@@ -264,17 +268,23 @@ def main(args):
     # 3. compute observed and randomized chiasm scores
     cos_sim = cosine_similarity(feats, feats)
 
-    N = [4,5]
+    N = [4,5,6,7,8]
 
     scores = {}
     for n in tqdm(N):
         os = []
+        els = []
         for i in range(len(groups)-n):
             opt = True
-            try:
-                curr_book = locs[indices[i][0]].book
+            if True:
+                if type(indices[i][0]) == str:
+                    curr_book = locs[int(indices[i][0][:-1])].book
+                else:
+                    curr_book = locs[indices[i][0]].book
                 for gr in indices[i:i+n]:
                     for v in gr:
+                        if type(v) == str:
+                            v = int(v[:-1])
                         if locs[v].book != curr_book:
                             #print(f"{locs[v].book} does not match {curr_book}, so skipping")
                             opt=False
@@ -282,12 +292,15 @@ def main(args):
                         if not opt:
                             break
                 if opt:
-                    os.append(get_chiasm_score(cos_sim, i, n=n))
+                    score, el = get_chiasm_score(cos_sim, i, n=n)
+                    os.append(score)
+                    els.append(el)
                 else:
                     os.append(0)
-            except:
-                os.append(0)
-        scores[n] = os
+                    els.append([])
+            # except:
+            #     os.append(0)
+        scores[n] = {"os": os, "els": els}
         
 
     # these are all the scores
