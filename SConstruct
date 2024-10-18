@@ -11,16 +11,14 @@ from glob import glob
 import time
 import sys
 import json
-#from steamroller import Environment
-
-# I'm not running this on the grid, so remove everything to do with clusters,
-# need to download the data, it's pretty easy to find where it is
-# grb.tsv is on your repo, can download it directly
-# STEP for OT
-# we will have to face the misalignment issues in the JHUBC somehow with a note that future work will include it
-# hopefully Hale has done some looking into that 
+import imp
+from steamroller import Environment
 
 # workaround needed to fix bug with SCons and the pickle module
+del sys.modules['pickle']
+sys.modules['pickle'] = imp.load_module('pickle', *imp.find_module('pickle'))
+import pickle
+
 
 # actual variable and environment objects
 vars = Variables()
@@ -28,13 +26,9 @@ vars = Variables()
 vars.AddVariables(
     ("GPU_ACCOUNT", "", None),
     ("GPU_QUEUE", "", None),
-    # ("DATA_PATH", "", os.path.expanduser("~/corpora")),
     ("DATA_PATH", "", "data"),
-    # ("BIBLE_CORPUS", "", os.path.expanduser("${DATA_PATH}/bible-corpus")),
-    ("BIBLE_CORPUS", "", "${DATA_PATH}/bibles2"),
-    # ("CROSS_REFERENCE_FILE", "", os.path.expanduser("~/corpora/biblical-cross-references.txt")),
+    ("BIBLE_CORPUS", "", "${DATA_PATH}/bibles"),
     ("CROSS_REFERENCE_FILE", "", "${DATA_PATH}/biblical-cross-references.txt"),
-    # ("STEP_BIBLE_PATH", "", os.path.expanduser("~/corpora/STEPBible-Data/Translators Amalgamated OT+NT")),
     ("STEP_BIBLE_PATH", "", "${DATA_PATH}/STEP"),
     ("DEVICE", "", "cuda"),
     ("BATCH_SIZE", "", 50),
@@ -46,7 +40,6 @@ vars.AddVariables(
             "Hebrew" : ("he_IL", "heb_Hebr", "he", "Ancient_Hebrew"),
             "Greek" : ("el_XX", "ell_Grek", "el", "Ancient_Greek"),
             "English" : ("en_XX", "eng_Latn", "en", "English"),
-            #"Japanese" : ("ja_XX", "jpn_Jpan"),
             "Finnish" : ("fi_FI", "fin_Latn", "fi", "Finnish"),
             "Turkish" : ("tr_TR", "tur_Latn", "tr", "Turkish"),
             "Swedish" : ("sv_SE", "swe_Latn", "sv", "Swedish"),
@@ -76,21 +69,12 @@ env = Environment(
         "ConvertFromXML" : Builder(
             action="python scripts/convert_from_xml.py --testament ${TESTAMENT} --input ${SOURCES[0]} --output ${TARGETS[0]}"
         ),
-        # "ConvertFromWLC" : Builder(
-        #     action="python scripts/convert_from_wlc.py --testament ${TESTAMENT} --input ${SOURCES[0]} --output ${TARGETS[0]}"
-        # ),
         "ConvertFromSTEP" : Builder(
             action="python scripts/convert_from_aligned_step.py --input ${SOURCE} --output ${TARGET} --lang ${LANGUAGE}"
-        ),        
-        # "ConvertFromSeptuagint" : Builder(
-        #     action="python scripts/convert_from_septuagint.py --testament ${TESTAMENT} --input ${SOURCES[0]} --output ${TARGETS[0]}"
-        # ),        
+        ),          
         "EmbedDocument" : Builder(
             action="python scripts/embed_document.py --input ${SOURCES[0]} --device ${DEVICE} --output ${TARGETS[0]} --batch_size ${BATCH_SIZE}"
         ),
-        # "TranslateDocument" : Builder(
-        #     action="python scripts/translate_document.py --input ${SOURCES[0]} --output ${TARGETS[0]} --model ${MODEL} --source_lang ${SRC_LANG} --target_lang ${TGT_LANG} --device ${DEVICE} --batch_size ${BATCH_SIZE} ${'--disallow_referenced ' + DISALLOW_REFERENCED if DISALLOW_REFERENCED else ''} ${'--vote_threshold ' + str(VOTE_THRESHOLD) if VOTE_THRESHOLD else ''} ${'--disallow_target ' + SOURCES[1].rstr() if len(SOURCES) == 2 else ''}"
-        # ),
         "MakePrompt": Builder(
             action="python scripts/make_prompt.py --original ${SOURCES[0]} --human_translation ${SOURCES[1]} --src ${SRC_LANG} --tgt ${TGT_LANG} --output ${TARGET}"
         ),
@@ -259,7 +243,7 @@ for original in env["ORIGINALS"]:
                     translation = tenv.TranslateDocument(
                         "work/${TESTAMENT}/${MANUSCRIPT}/${CONDITION_NAME}/${MODEL}/${LANGUAGE}.json.gz",
                         inputs,
-                        PROMPT=prompt,
+                        # PROMPT=prompt,
                         SRC_LANG=src_lang,
                         TGT_LANG=tgt_lang,
                         BATCH_SIZE=15,

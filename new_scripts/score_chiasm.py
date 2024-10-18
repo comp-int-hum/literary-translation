@@ -233,14 +233,13 @@ def get_chiasm_score(cos_sim, i, n, sim_threshold=0.9, penalty=0.1):
     # now reverse the diagonal
     chiasm = np.fliplr(np.triu(chiasm))
     pairs = np.diagonal(chiasm)[:n//2]
-
+  
     non_pairs = np.sum(chiasm) - np.sum(pairs) - np.sum(np.identity(n))
 
     avg_pairs = np.sum(pairs)/(n//2)
     avg_nonpairs = non_pairs/(n*(n-2)//2)
-
-
-    return (avg_pairs-avg_nonpairs), (pairs, avg_nonpairs)
+    
+    return (avg_pairs-avg_nonpairs), (pairs,avg_nonpairs)
 
 def main(args):
     # STEPS:
@@ -298,8 +297,7 @@ def main(args):
                 else:
                     os.append(0)
                     els.append([])
-            # except:
-            #     os.append(0)
+            
         scores[n] = {"os": os, "els": els}
         
 
