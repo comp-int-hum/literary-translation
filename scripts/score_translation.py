@@ -46,7 +46,7 @@ if __name__ == "__main__":
     print(f"Found {len(aligned_sources)} aligned sentences across all three")
 
     if len(aligned_sources) < 1000:
-        print(f"Not enough lines to translate")
+        print(f"Not enough lines to score")
         exit()
     # Load evaluation metrics from Hugging Face's evaluate library
     comet_metric = evaluate.load("comet")

@@ -8,6 +8,7 @@ from transformers import NllbTokenizer, AutoModelForSeq2SeqLM, AutoTokenizer, Au
 from utils import Location
 import stopwordsiso as sw
 import sys
+import os
 from tqdm import tqdm
 
 logger = logging.getLogger("translate_document")
@@ -94,30 +95,23 @@ if __name__ == "__main__":
             item = json.loads(line)
             all_lines.append((Location(item["location"]), item["text"]))
 
-    # here's where we add a block about checking which translations are already completed
-    # existing_data = {}
-    # if os.path.exists(f"{args.output}"):
-    #     with open(f"{args.output}", 'rt') as ifd:
-    #         for line in ifd:
-    #             item = json.loads(line)
-    #             location = Location(item['location'])
-    #             existing_data[location] = item['text']
-    #
-    #     logger.info(f"\n\nbefore pruning, {len(all_prompts)} lines to translate")
-    #     all_prompts = [p for p in all_prompts if p[0] not in existing_data]
-    #     logger.info(f"after pruning, {len(all_prompts)} lines to translate\n\n")
-    # # with open(args.input, "rt") as ifd, open(args.output, "wt") as ofd:
-        
-    with open(args.output, "wt") as ofd:
+
+    existing_data = {}
+    if os.path.exists(f"{args.output}"):
+        with open(f"{args.output}", 'rt') as ifd:
+            for line in ifd:
+                item = json.loads(line)
+                location = Location(item['location'])
+                existing_data[location] = item['text']
+    
+        logger.info(f"\n\nbefore pruning, {len(all_lines)} lines to translate")
+        all_prompts = [p for p in all_lines if p[0] not in existing_data]
+        logger.info(f"after pruning, {len(all_prompts)} lines to translate\n\n")
+  
+    with open(args.output, "a") as ofd:
         batch = []
         for i, line in enumerate(tqdm(all_lines)):
             batch.append(line)
-            # item = json.loads(line)
-            # try:
-            #     batch.append((Location(item["location"]), item["text"]))
-            # except:
-            #     print(item)
-            #     exit()
             if len(batch) == args.batch_size:
                 encoded = tokenizer([t for _, t in batch], return_tensors="pt", padding=True)
                 encoded.to(args.device)

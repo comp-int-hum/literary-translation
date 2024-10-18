@@ -24,9 +24,8 @@ import pickle
 vars = Variables()
 
 vars.AddVariables(
-    ("GPU_ACCOUNT", "", None),
-    ("GPU_QUEUE", "", None),
     ("DATA_PATH", "", "data"),
+    ("WORK_DIR", "", "work"),
     ("BIBLE_CORPUS", "", "${DATA_PATH}/bibles"),
     ("CROSS_REFERENCE_FILE", "", "${DATA_PATH}/biblical-cross-references.txt"),
     ("STEP_BIBLE_PATH", "", "${DATA_PATH}/STEP"),
@@ -55,10 +54,8 @@ vars.AddVariables(
             {"testament" : "OT", "language" : "Hebrew", "form" : "STEP", "file" : "${STEP_BIBLE_PATH}/OT_aligned.json", "manuscript" : "TAHOT"},
         ]
     ),
-    ("TRANSLATION_LANGUAGES", "", ["English", "Finnish","Turkish", "Swedish", "Marathi"]), # can remove Japenese "Japanese",
-    ("USE_PRECOMPUTED_EMBEDDINGS", "", False),
+    ("TRANSLATION_LANGUAGES", "", ["English", "Finnish", "Turkish", "Swedish", "Marathi"]),
     ("MODELS", "",["CohereForAI/aya-23-8B"]),
-    ("PREFIX", "", "work")#"work"#"facebook/m2m100_1.2B",]), #"CohereForAI/aya-23-8B"]), #"facebook/nllb-200-distilled-600M", ['facebook/nllb-200-3.3B']),#["CohereForAI/aya-23-8B"]),#"facebook/m2m100_1.2B",]), #"CohereForAI/aya-23-8B"]), #"facebook/nllb-200-distilled-600M", 
 )
 
 env = Environment(
@@ -84,18 +81,12 @@ env = Environment(
         "PostProcess": Builder(
             action="python scripts/postprocess.py --inputs ${SOURCES} --output ${TARGET} --src ${SRC_LANG} --tgt ${TGT_LANG}"
         ),
-        "Score": Builder(
+        "ScoreTranslation": Builder(
             action="python scripts/score_translation.py --preds ${SOURCES[0]} --refs ${SOURCES[1]} --sources ${SOURCES[2]} --lang ${TGT_LANG} --output ${TARGET}"
         ),
-        "ScoreEmbeddings" : Builder(
-            action="python scripts/score_embeddings.py --gold ${SOURCES[0]} --embeddings ${SOURCES[1]} --output ${TARGETS[0]} --vote_threshold ${VOTE_THRESHOLD} --testament ${TESTAMENT} --language ${LANGUAGE} --condition ${CONDITION_NAME} --random_seed ${RANDOM_SEED} --manuscript ${MANUSCRIPT}"
-        ),
         "InspectTranslation": Builder(
-            action="python scripts/inspect_translations.py --gold ${SOURCES[0]} --embeddings ${SOURCES[1:]} --output ${TARGET} --testament ${TESTAMENT}"
+            action="python scripts/inspect_translations.py --gold ${SOURCES[0]} --embeddings ${SOURCES[1:]} --output ${TARGET}"
         ),
-        # "SummarizeScores" : Builder(
-        #     action="python scripts/summarize_scores.py --output ${TARGETS[0]} --inputs ${SOURCES}"
-        # ),
     }
 )
 
@@ -105,11 +96,13 @@ env.Decider("timestamp-newer")
 lang_map = env["LANGUAGE_MAP"]
 r_lang_map = {v : k for k, v in lang_map.items()}
 
-# HERE WE ARE EMBEDDING HUMAN TRANSLATIONS
+# keeping track of output files for later analysis
 embeddings = {}
 human_translations = {}
 originals ={}
-translations = {}
+mt_translations = {}
+
+# Pre-Processing and Embedding Human Translations 
 for testament in ["OT", "NT"]:
     embeddings[testament] = embeddings.get(testament, {})
     human_translations[testament] = human_translations.get(testament, {})
@@ -119,8 +112,8 @@ for testament in ["OT", "NT"]:
         condition_name = "human_translation"
         embeddings[testament][manuscript] = embeddings[testament].get(manuscript, {})
         embeddings[testament][manuscript][language] = embeddings[testament][manuscript].get(language, {})
- 
 
+        # this bit is confusing, I think we need to just use
         renv = env.Override(
             {
                 "TESTAMENT" : testament,
@@ -130,32 +123,29 @@ for testament in ["OT", "NT"]:
             }
         )
 
-        if env["USE_PRECOMPUTED_EMBEDDINGS"]:
-            emb = renv.File(renv.subst("work/${TESTAMENT}/${MANUSCRIPT}/${CONDITION_NAME}/${LANGUAGE}/${MODEL}-embedded.json.gz"))
-            human_trans = None
-        else:
-            human_trans = os.path.join(env["PREFIX"], renv['TESTAMENT'], renv['MANUSCRIPT'], renv['CONDITION_NAME'], renv['LANGUAGE'] + ".json.gz")
-            # human_trans = renv.ConvertFromXML(
-            #     "aya_translations/work/${TESTAMENT}/${MANUSCRIPT}/${CONDITION_NAME}/${LANGUAGE}.json.gz",
-            #     "${BIBLE_CORPUS}/${LANGUAGE}.xml",
-            # )
-            # emb = renv.EmbedDocument(
-            #     "work/${TESTAMENT}/${MANUSCRIPT}/${CONDITION_NAME}/${LANGUAGE}-embedded.json.gz",
-            #     human_trans,
-            #     BATCH_SIZE=100,
-            #     DEVICE="cuda"                
-            # )[0]
-            emb  = env.File(os.path.join(env["PREFIX"], renv["TESTAMENT"], renv['MANUSCRIPT'], renv['CONDITION_NAME'],f"{renv['LANGUAGE']}-embedded.json.gz"))
+        human_trans = env.ConvertFromXML(
+            renv.subst("${WORK_DIR}/${TESTAMENT}/${MANUSCRIPT}/${CONDITION_NAME}/${LANGUAGE}.json.gz")
+            "${BIBLE_CORPUS}/${LANGUAGE}.xml",
+        )
+        emb = env.EmbedDocument(
+            renv.subst("${WORK_DIR}/${TESTAMENT}/${MANUSCRIPT}/${CONDITION_NAME}/${LANGUAGE}-embedded.json.gz")
+            human_trans,
+            BATCH_SIZE=1000,
+            DEVICE="cuda"                
+        )[0]
+
+        # save the processed translation and embedding
         human_translations[testament][language] = human_trans
         embeddings[testament][manuscript][language][condition_name] = emb
 
-# HERE WE EMBED THE ORIGINAL MANUSCRIPTS, THEN PRODUCE TRANSLATIONS AND EMBED THOSE
+# Pre-Processing and Embedding Original Documents 
 for original in env["ORIGINALS"]:
     condition_name = "original"
     original_language = original["language"]
     original_file = original["file"]
     testament = original["testament"]
     manuscript = "{}-{}".format(original["manuscript"], original_language)
+    
     embeddings[testament] = embeddings.get(testament, {})
     embeddings[testament][manuscript] = embeddings[testament].get(manuscript, {})
     embeddings[testament][manuscript][original_language] = embeddings[testament][manuscript].get(original_language, {})
@@ -172,56 +162,53 @@ for original in env["ORIGINALS"]:
             "MANUSCRIPT" : manuscript
         }
     )
-    if env["USE_PRECOMPUTED_EMBEDDINGS"]:
-        orig_emb = renv.File(renv.subst("aya_translations/work/${TESTAMENT}/${MANUSCRIPT}/${CONDITION_NAME}/${LANGUAGE}-embedded.json.gz"))
-        orig = None
-        human_trans = None
-    else:
-        orig = env.File(os.path.join(env['PREFIX'],renv['TESTAMENT'], renv['MANUSCRIPT'],renv['CONDITION_NAME'], renv['LANGUAGE']+".json.gz"))
-        # orig = renv.ConvertFromSTEP(
-        #         "work/${TESTAMENT}/${MANUSCRIPT}/${CONDITION_NAME}/${LANGUAGE}.json.gz",
-        #         original_file,
-        #         LANGUAGE=original_language
-        #     )
-        originals[testament][manuscript][original_language] = orig
-        # orig_emb = renv.EmbedDocument(
-        #    "work/${TESTAMENT}/${MANUSCRIPT}/${CONDITION_NAME}/${LANGUAGE}-embedded.json.gz",
-        #    orig,
-        #    BATCH_SIZE=100,
-        #    DEVICE="cuda"            
-        # )[0]
-        orig_emb = env.File(f"work/{renv['TESTAMENT']}/{renv['MANUSCRIPT']}/{renv['CONDITION_NAME']}/{renv['LANGUAGE']}-embedded.json.gz",)
-        embeddings[testament][manuscript][original_language][condition_name] = orig_emb
+
+    orig = renv.ConvertFromSTEP(
+            renv.subst("${WORK_DIR}/${TESTAMENT}/${MANUSCRIPT}/${CONDITION_NAME}/${LANGUAGE}.json.gz")
+            original_file,
+            LANGUAGE=original_language
+        )
+    originals[testament][manuscript][original_language] = orig
+    
+    orig_emb = renv.EmbedDocument(
+        renv.subst("${WORK_DIR}/${TESTAMENT}/${MANUSCRIPT}/${CONDITION_NAME}/${LANGUAGE}-embedded.json.gz")
+        orig,
+        BATCH_SIZE=1000,
+        DEVICE="cuda"            
+    )[0]
+    
+    embeddings[testament][manuscript][original_language][condition_name] = orig_emb
 
 
     for other_language in env["TRANSLATION_LANGUAGES"]:
-        translations[testament] = translations.get(testament, {})
-        translations[testament][manuscript] = translations[testament].get(manuscript, {})
-        translations[testament][manuscript][other_language] = translations[testament][manuscript].get(other_language, {})
+        mt_translations[testament] = mt_translations.get(testament, {})
+        mt_translations[testament][manuscript] = mt_translations[testament].get(manuscript, {})
+        mt_translations[testament][manuscript][other_language] = mt_translations[testament][manuscript].get(other_language, {})
+        
         embeddings[testament][manuscript][other_language] = embeddings[testament][manuscript].get(other_language, {})        
+        
         src_lang = env["LANGUAGE_MAP"][original_language][3]
         tgt_lang = env["LANGUAGE_MAP"][other_language][3]        
-        human_trans = human_translations[testament][other_language]
-        # here we will make a prompt 
-        # prompt = env.MakePrompt(os.path.join(env["PREFIX"], renv["TESTAMENT"], renv["MANUSCRIPT"], tgt_lang + ".txt"),
-        #                         [orig, human_trans],
-        #                         SRC_LANG=f"{src_lang}", 
-        #                         TGT_LANG=tgt_lang)
-
-        prompt = env.File(os.path.join(env['PREFIX'], renv["TESTAMENT"], renv['MANUSCRIPT'], tgt_lang+".txt"))
         
+        # grab the appropriate human translation for the current testament and translation language
+        human_trans = human_translations[testament][other_language]
+        
+        prompt = env.MakePrompt(os.path.join(env["WORK_DIR"], renv["TESTAMENT"], renv["MANUSCRIPT"], tgt_lang + ".txt"),
+                                [orig, human_trans],
+                                SRC_LANG=src_lang, 
+                                TGT_LANG=tgt_lang)
+
+
         for model in env["MODELS"]:
-            #print(model)
             model_name = model.replace('/', '_')
             embeddings[testament][manuscript][other_language][model_name] = embeddings[testament][manuscript][other_language].get(model_name, {})
-            translations[testament][manuscript][other_language][model_name] = translations[testament][manuscript][other_language].get(model_name, {})
+            mt_translations[testament][manuscript][other_language][model_name] = mt_translations[testament][manuscript][other_language].get(model_name, {})
+            
             for condition_name, inputs, args in [
                     ("unconstrained", orig, {}),
-                    # ("exclude_human", [orig, human_trans], {}),
-                    # ("exclude_references", orig, {"DISALLOW_REFERENCED" : env["CROSS_REFERENCE_FILE"]}),
-                    #("exclude_both", [orig, human_trans], {"DISALLOW_REFERENCED" : env["CROSS_REFERENCE_FILE"]}),
             ]:
                 embeddings[testament][manuscript][other_language][condition_name] = embeddings[testament][manuscript][other_language].get(condition_name, {})  
+                
                 tenv = renv.Override(
                     {
                         "TESTAMENT" : testament,
@@ -231,144 +218,53 @@ for original in env["ORIGINALS"]:
                         "MODEL": model,
                     }
                 )
-                if env["USE_PRECOMPUTED_EMBEDDINGS"]:
-                    emb = tenv.File(
-                        renv.subst(
-                            "aya_translations/work/${TESTAMENT}/${MANUSCRIPT}/${CONDITION_NAME}/${MODEL}/${LANGUAGE}-embedded.json.gz"
-                        )
-                    )
-                else:
-                    # #translation = None
-                    # if manuscript in ["LXX-Greek","TAGNT-Greek"] and other_language not in ["English","Marathi", "Finnish"]: 
-                    translation = tenv.TranslateDocument(
-                        "work/${TESTAMENT}/${MANUSCRIPT}/${CONDITION_NAME}/${MODEL}/${LANGUAGE}.json.gz",
-                        inputs,
-                        # PROMPT=prompt,
-                        SRC_LANG=src_lang,
-                        TGT_LANG=tgt_lang,
-                        BATCH_SIZE=15,
-                        DEVICE="cuda",
-                        MODEL=model,
-                        **args
-                    )
-                        #env.Depends(translation, prompt)
-                    #translation = env.File(f"{env['PREFIX']}/{tenv['TESTAMENT']}/{tenv['MANUSCRIPT']}/{tenv['CONDITION_NAME']}/{tenv['MODEL']}/{tenv['LANGUAGE']}.json.gz") 
+                
+                translation = tenv.TranslateDocument(
+                    tenv.subst("${WORK_DIR}/${TESTAMENT}/${MANUSCRIPT}/${CONDITION_NAME}/${MODEL}/${LANGUAGE}.json.gz")
+                    inputs,
+                    PROMPT=prompt,
+                    SRC_LANG=src_lang,
+                    TGT_LANG=tgt_lang,
+                    BATCH_SIZE=15,
+                    DEVICE="cuda",
+                    MODEL=model,
+                    **args
+                )
+                env.Depends(translation, prompt)
+                
+                mt_translations[testament][manuscript][other_language][model_name][condition_name] = translation
                     
-                    translations[testament][manuscript][other_language][model_name][condition_name] = translation
+                preds = env.PostProcess(
+                    tenv.subst("${WORK_DIR}/${TESTAMENT}/${MANUSCRIPT}/${CONDITION_NAME}/${MODEL}/${LANGUAGE}.json")
+                    translation,
+                    SRC_LANG=src_lang,
+                    TGT_LANG=tgt_lang
+                )
+                
+                # collect the bits you need for translation scoring, comet needs both human refs and sources
+                human_translation = human_translations[testament][other_language]
+                original = originals[testament][manuscript][original_language]
+
+                env.ScoreTranslation(os.path.join(env["WORK_DIR"], testament, manuscript, "_".join([other_language, 'score.txt'])),
+                                      [preds, human_translation, original],
+                                      TGT_LANG=other_language)
+                            
                     
-                    # preds = env.PostProcess(
-                    #                 os.path.join(env['PREFIX'], testament, manuscript, condition_name, model, other_language+'.json'), 
-                    #                     translation,
-                    #                     SRC_LANG=src_lang,
-                    #                     TGT_LANG=tgt_lang)
-#                             
+                emb = tenv.EmbedDocument(
+                    tenv.subst("${WORK_DIR}/${TESTAMENT}/${MANUSCRIPT}/${CONDITION_NAME}/${MODEL}/${LANGUAGE}-embedded.json.gz")
+                    preds,
+                    BATCH_SIZE=1000,
+                    DEVICE="cuda"                    
+                    )[0]
+    
+                embeddings[testament][manuscript][other_language][condition_name]= emb
 
-
-
-                    # if os.path.exists(translation.get_path()) and tenv["LANGUAGE"] == "Finnish":
-                    #     emb = tenv.EmbedDocument(
-                    #     os.path.join(env["PREFIX"], tenv["TESTAMENT"], tenv["MANUSCRIPT"], tenv['CONDITION_NAME'], tenv['MODEL'],f"{tenv['LANGUAGE']}-embedded.json.gz"),
-                    #     # "work/${TESTAMENT}/${MANUSCRIPT}/${CONDITION_NAME}/${MODEL}/${LANGUAGE}-embedded.json.gz",
-                    #     preds,
-                    #     BATCH_SIZE=1000,
-                    #     DEVICE="cuda"                    
-                    # )[0]
-                    # emb = env.File(os.path.join(env["PREFIX"], tenv["TESTAMENT"], tenv["MANUSCRIPT"], tenv['CONDITION_NAME'], tenv['MODEL'],f"{tenv['LANGUAGE']}-embedded.json.gz"))
-                    # embeddings[testament][manuscript][other_language][condition_name]= emb
-
-#print(originals)
-# for testament in ["NT"]:
-#     for manuscript in ["TAGNT-Greek"]:
-#         if True:
-#             original_language = manuscript.split('-')[1]
-#             original = originals[testament][manuscript][original_language]
-#             #print(f"original is {original}")
-#             for other_language in env["TRANSLATION_LANGUAGES"]:
-#                 human_translation = human_translations[testament][other_language] # e.g. [NT][Swedish]
-#                 #print(f"human translation is {human_translation}")
-#                 src_lang = env["LANGUAGE_MAP"][original_language][3] #e.g. Ancient Greek
-#                 tgt_lang = env["LANGUAGE_MAP"][other_language][3] #e.g. Finnish
-#                 for model in ['CohereForAI/aya-23-8B']:#(except this will always be aya)
-#                     model_name = model.replace('/', '_')
-#                     for condition_name in ["unconstrained"]:
-                        # dummy_out = translations[testament][manuscript][other_language][model_name][condition_name]
-                        # #print(f"machine translation is {dummy_out.get_dir()}")
-                        # #print(dummy_out.get_path())
-                        # # file_patterns = os.path.join(os.path.dirname(dummy_out.get_path()), f'{other_language}*_copy')
-                        # # # #os.listdir(os.path.dirname(dummy_out.get_path()))
-                        # # # # Get all matching files
-                        # # matching_files = glob(file_patterns)
-                        # # # if len(matching_files) > 0:
-                        # # print(matching_files)
-                        # # print(matching_files)
-                        # input = dummy_out.get_path() #+ '_copy'
-                        # print(input)
-                        # # print(f"input is {input}")
-                        # # if os.path.exists(input) :
-                        #
-                        # if os.path.exists(input): 
-                        #     preds = env.PostProcess(os.path.join(env['PREFIX'], testament, manuscript, condition_name, model, other_language+'.json'), 
-                        #                 input,
-                        #                 SRC_LANG=src_lang,
-                        #                 TGT_LANG=tgt_lang)
-                        #     
-                        #     
-                        #     env.Score(os.path.join(env["PREFIX"], testament, manuscript, "_".join([other_language, 'score.txt'])),
-                        #               [preds, human_translation, original],
-                        #               TGT_LANG=other_language)
-        # except KeyError:
-        #     print(testament, manuscript)
-        #     continue
-
-
-############# THIS IS THE EMBEDDING SCORING ######
-
-# for testament, languages in embeddings.items():
-#     for language, constraints in languages.items():
-#         for constraint_name, emb in constraints.items():
-#             self_score = env.ScoreEmbeddings(
-#                 "work/${TESTAMENT}/${CONSTRAINT_NAME}/${LANGUAGE}-score.json",
-#                 [env["CROSS_REFERENCE_FILE"], emb],
-#                 TESTAMENT=testament,
-#                 LANGUAGE=language,
-#                 CONSTRAINT_NAME=constraint_name
-#             )p
-#
-for testament, languages in embeddings.items():
-    for language, constraints in languages.items():
-        # print(language, constraints)
-        for constraint_name, condition in constraints.items():
-            for condition, emb in condition.items():
-                # print(condition, emb)
-                # if type(emb) == dict:
-                #     for model
-                # try:
-              
-#                 if True:
-#                     embs = [embeddings['NT'][language][constraint_name][condition],
-#                         embeddings['OT'][language][constraint_name][condition]]
-#                     out = f"work/both/{language}/{condition}/{constraint_name}-score-CI.json"
-#
-#                     self_score = env.InspectTranslation(out,
-#                     [env["CROSS_REFERENCE_FILE"], embs],
-#                                                     TESTAMENT="both")
-# #                 #         )
-# #
-                # print(embeddings['NT'][language][constraint_name][condition])
-                # print(embeddings['OT'][language][constraint_name][condition])    
-                out = f"work/{testament}/{language}/{condition}/{constraint_name}-score-CI.json"
-                if emb!= {} and condition not in ['original', 'human_translation']:              
-                    self_score = env.InspectTranslation(
-
-                    # "work/${TESTAMENT}/${CONSTRAINT_NAME}/${LANGUAGE}-score.json"
-                    out,
+                ## Now we can get the INTT score  
+                intt_score = env.InspectTranslation(
+                    tenv.subst("${WORK}/${TESTAMENT}/${MANUSCRIPT}/${CONDITION_NAME}/${MODEL}/${LANGAUGE}-score-CI.json")
                     [env["CROSS_REFERENCE_FILE"], [emb]],
-                        )
-                # except:
-                #     pass
-# #
-# summary = env.SummarizeScores(
-#     "work/summary.tex",
-#     sorted(scores)
-# ) 
+                )
+
+                
+
 
