@@ -99,8 +99,9 @@ def calc_vf(input, output, golds, embs=None):
                                "CI": conf_int
                             }) + "\n")
 
+calc_vf('data/valerius_flaccus/embs.json.gz', 'data/valerius_flaccus/output.txt', golds)
 
-# calc_vf('data/valerius_flaccus/embs.json.gz', 'data/valerius_flaccus/output.txt', golds)
+exit()
 
 amores = pd.read_csv('data/valerius_flaccus/amores.csv')
 amores['reference'] = 'amores' + '.'+ amores['reference']

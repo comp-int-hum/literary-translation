@@ -24,21 +24,24 @@ if __name__ == "__main__":
 
     logging.basicConfig(level=logging.INFO)
 
-    model = SentenceTransformer('sentence-transformers/LaBSE')
+    model = SentenceTransformer('sentence-transformers/LaBSE', device=args.device)
     
     #model = MBartForConditionalGeneration.from_pretrained("facebook/mbart-large-50-many-to-many-mmt")
     #tokenizer = MBart50TokenizerFast.from_pretrained("facebook/mbart-large-50-many-to-many-mmt")
     #tokenizer.src_lang = args.language
     model.to(args.device)
     
-    with gzip.open(args.input, "rt") as ifd, gzip.open(args.output, "wt") as ofd:
+    with open(args.input, "rt") as ifd, gzip.open(args.output, "wt") as ofd:
         batch = []
         for i, line in enumerate(ifd):
             item = json.loads(line)
             loc = Location(item["location"])
+            if item["text"]== None:
+                continue
             batch.append((loc, item["text"]))
+            
             if len(batch) == args.batch_size:
-                encs = model.encode([x for _, x in batch], show_progress_bar=False)
+                encs = model.encode([x for _, x in batch], show_progress_bar=True)
 
                 # encoded = tokenizer([t for _, t in batch], return_tensors="pt", padding=True)
                 # encoded.to(args.device)
@@ -60,7 +63,7 @@ if __name__ == "__main__":
                 #sys.exit()
                 
         if len(batch) > 0:
-            encs = model.encode([x for _, x in batch], show_progress_bar=False)
+            encs = model.encode([x for _, x in batch], show_progress_bar=True)
             #encoded = tokenizer([t for _, t in batch], return_tensors="pt", padding=True)
             #encoded.to(args.device)
             #out = model.generate(

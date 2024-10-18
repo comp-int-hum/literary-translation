@@ -94,9 +94,19 @@ if __name__ == "__main__":
             item = json.loads(line)
             all_lines.append((Location(item["location"]), item["text"]))
 
-
-
-    # with open(args.input, "rt") as ifd, open(args.output, "wt") as ofd:
+    # here's where we add a block about checking which translations are already completed
+    # existing_data = {}
+    # if os.path.exists(f"{args.output}"):
+    #     with open(f"{args.output}", 'rt') as ifd:
+    #         for line in ifd:
+    #             item = json.loads(line)
+    #             location = Location(item['location'])
+    #             existing_data[location] = item['text']
+    #
+    #     logger.info(f"\n\nbefore pruning, {len(all_prompts)} lines to translate")
+    #     all_prompts = [p for p in all_prompts if p[0] not in existing_data]
+    #     logger.info(f"after pruning, {len(all_prompts)} lines to translate\n\n")
+    # # with open(args.input, "rt") as ifd, open(args.output, "wt") as ofd:
         
     with open(args.output, "wt") as ofd:
         batch = []

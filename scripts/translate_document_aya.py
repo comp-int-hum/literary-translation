@@ -9,6 +9,7 @@ from utils import Location
 import stopwordsiso as sw
 import sys
 import torch
+import os
 from tqdm import tqdm
 
 logger = logging.getLogger("translate_document")
@@ -99,9 +100,23 @@ if __name__ == "__main__":
             item = json.loads(line)
             all_lines.append((Location(item["location"]), make_input_example(prompt, item["text"])))
 
+    existing_data = {}
+    if os.path.exists(f"{args.output}_copy"):
+        with open(f"{args.output}_copy", 'rt') as ifd:
+            for line in ifd:
+                item = json.loads(line)
+                location = Location(item['location'])
+                existing_data[location] = item['text']
+
+        logger.info(f"\n\nbefore pruning, {len(all_lines)} lines to translate. Found {len(existing_data)} lines already")
+        all_lines = [p for p in all_lines if p[0] not in existing_data]
+        logger.info(f"after pruning, {len(all_lines)-len(existing_data)} remaining lines to translate\n\n")
+    else:
+        logger.info("no previous translations found")
+    
 
 
-    with open(args.output, "wt") as ofd:
+    with open(f"{args.output}_copy", "a") as ofd:
         batch = []
         for i, line in enumerate(tqdm(all_lines)):
             batch.append(line)
@@ -151,6 +166,9 @@ if __name__ == "__main__":
                 logger.info("Processed %d sentences", i + 1)
 
                 # sanity checking:
+                if i >= 2_000:
+                    break
+
         if len(batch) > 0:
                 encoded = tokenizer([t for _, t in batch], return_tensors="pt", padding=True)
                 encoded.to(args.device)
