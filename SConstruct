@@ -22,6 +22,9 @@ import pickle
 
 # actual variable and environment objects
 vars = Variables()
+# NOTE: uncomment if you have variables in custom.py to add, like GPU account
+#vars = Variables("custom.py")
+
 
 vars.AddVariables(
     ("DATA_PATH", "", "data"),
@@ -56,6 +59,7 @@ vars.AddVariables(
     ),
     ("TRANSLATION_LANGUAGES", "", ["English", "Finnish", "Turkish", "Swedish", "Marathi"]),
     ("MODELS", "",["CohereForAI/aya-23-8B"]),
+    ("OT_DATA", "", "${DATA_DIR}/STEP/OT_aligned.json"),
 )
 
 env = Environment(
@@ -87,6 +91,12 @@ env = Environment(
         "InspectTranslation": Builder(
             action="python scripts/inspect_translations.py --gold ${SOURCES[0]} --embeddings ${SOURCES[1:]} --output ${TARGET}"
         ),
+        "ScoreChiasm": Builder(
+                        action="python scripts/score_chiasm.py --input ${SOURCE} --output ${TARGET} --group ${LEVEL} --feats ${FEATS}",
+        ),
+        "InspectChiasm": Builder(
+                        action="python scripts/inspect_chiasm.py --input ${SOURCES[0]} --scores ${SOURCES[1]}  --output ${TARGET} --subset ${SUBSET}"
+        )
     }
 )
 
@@ -96,6 +106,17 @@ env.Decider("timestamp-newer")
 lang_map = env["LANGUAGE_MAP"]
 r_lang_map = {v : k for k, v in lang_map.items()}
 
+############### Chiasm experiments ###############
+
+for level in ['half', 'verse',]: #'pesucha', 'setuma']:
+    for feats_combo in [['neural'],]:
+        feats = "_".join(feats_combo)
+        score = env.ScoreChiasm(os.path.join(env["WORK_DIR"], level, feats, 'scores.pkl'), env['OT_DATA'], 
+                        LEVEL=level, FEATS=feats_combo)
+        out_files = env.InspectChiasm(os.path.join(env["WORK_DIR"], f"{level}_{feats}_chiasm.xlsx"),
+                                    [env['OT_DATA'], score])
+        
+############### INTT experiments ###############
 # keeping track of output files for later analysis
 embeddings = {}
 human_translations = {}
@@ -113,7 +134,7 @@ for testament in ["OT", "NT"]:
         embeddings[testament][manuscript] = embeddings[testament].get(manuscript, {})
         embeddings[testament][manuscript][language] = embeddings[testament][manuscript].get(language, {})
 
-        # this bit is confusing, I think we need to just use
+        
         renv = env.Override(
             {
                 "TESTAMENT" : testament,
@@ -123,16 +144,20 @@ for testament in ["OT", "NT"]:
             }
         )
 
-        human_trans = env.ConvertFromXML(
-            renv.subst("${WORK_DIR}/${TESTAMENT}/${MANUSCRIPT}/${CONDITION_NAME}/${LANGUAGE}.json.gz")
-            "${BIBLE_CORPUS}/${LANGUAGE}.xml",
-        )
-        emb = env.EmbedDocument(
-            renv.subst("${WORK_DIR}/${TESTAMENT}/${MANUSCRIPT}/${CONDITION_NAME}/${LANGUAGE}-embedded.json.gz")
-            human_trans,
-            BATCH_SIZE=1000,
-            DEVICE="cuda"                
-        )[0]
+        if env["USE_PRECOMPUTED_EMBEDDINGS"]:
+            human_trans = env.File(renv.subst("${WORK_DIR}/${TESTAMENT}/${MANUSCRIPT}/${CONDITION_NAME}/${LANGUAGE}.json.gz"))
+            emb = env.File(renv.subst("${WORK_DIR}/${TESTAMENT}/${MANUSCRIPT}/${CONDITION_NAME}/${LANGUAGE}-embedded.json.gz"))
+        else:
+            human_trans = env.ConvertFromXML(
+                renv.subst("${WORK_DIR}/${TESTAMENT}/${MANUSCRIPT}/${CONDITION_NAME}/${LANGUAGE}.json.gz")
+                "${BIBLE_CORPUS}/${LANGUAGE}.xml",
+            )
+            emb = env.EmbedDocument(
+                renv.subst("${WORK_DIR}/${TESTAMENT}/${MANUSCRIPT}/${CONDITION_NAME}/${LANGUAGE}-embedded.json.gz")
+                human_trans,
+                BATCH_SIZE=1000,
+                DEVICE="cuda"                
+            )[0]
 
         # save the processed translation and embedding
         human_translations[testament][language] = human_trans
@@ -163,20 +188,23 @@ for original in env["ORIGINALS"]:
         }
     )
 
-    orig = renv.ConvertFromSTEP(
-            renv.subst("${WORK_DIR}/${TESTAMENT}/${MANUSCRIPT}/${CONDITION_NAME}/${LANGUAGE}.json.gz")
-            original_file,
-            LANGUAGE=original_language
-        )
+    if env["USE_PRECOMPUTED_EMBEDDINGS"]:
+        orig = env.File(renv.subst("${WORK_DIR}/${TESTAMENT}/${MANUSCRIPT}/${CONDITION_NAME}/${LANGUAGE}.json.gz"))
+        orig_emb = env.File(renv.subst("${WORK_DIR}/${TESTAMENT}/${MANUSCRIPT}/${CONDITION_NAME}/${LANGUAGE}-embedded.json.gz"))
+    else:
+        orig = renv.ConvertFromSTEP(
+                renv.subst("${WORK_DIR}/${TESTAMENT}/${MANUSCRIPT}/${CONDITION_NAME}/${LANGUAGE}.json.gz")
+                original_file,
+                LANGUAGE=original_language
+            )
+
+        orig_emb = renv.EmbedDocument(
+            renv.subst("${WORK_DIR}/${TESTAMENT}/${MANUSCRIPT}/${CONDITION_NAME}/${LANGUAGE}-embedded.json.gz")
+            orig,
+            BATCH_SIZE=1000,
+            DEVICE="cuda"            
+        )[0]
     originals[testament][manuscript][original_language] = orig
-    
-    orig_emb = renv.EmbedDocument(
-        renv.subst("${WORK_DIR}/${TESTAMENT}/${MANUSCRIPT}/${CONDITION_NAME}/${LANGUAGE}-embedded.json.gz")
-        orig,
-        BATCH_SIZE=1000,
-        DEVICE="cuda"            
-    )[0]
-    
     embeddings[testament][manuscript][original_language][condition_name] = orig_emb
 
 
@@ -218,30 +246,42 @@ for original in env["ORIGINALS"]:
                         "MODEL": model,
                     }
                 )
+                if env["USE_PRECOMPUTED_EMBEDDINGS"]:
+                    translation = env.File(tenv.subst("${WORK_DIR}/${TESTAMENT}/${MANUSCRIPT}/${CONDITION_NAME}/${MODEL}/${LANGUAGE}.json.gz"))
+                    preds = env.File(tenv.subst("${WORK_DIR}/${TESTAMENT}/${MANUSCRIPT}/${CONDITION_NAME}/${MODEL}/${LANGUAGE}.json"))
+                    emb = env.File(tenv.subst("${WORK_DIR}/${TESTAMENT}/${MANUSCRIPT}/${CONDITION_NAME}/${MODEL}/${LANGUAGE}-embedded.json.gz"))
+                else:
+                    translation = tenv.TranslateDocument(
+                        tenv.subst("${WORK_DIR}/${TESTAMENT}/${MANUSCRIPT}/${CONDITION_NAME}/${MODEL}/${LANGUAGE}.json.gz")
+                        inputs,
+                        PROMPT=prompt,
+                        SRC_LANG=src_lang,
+                        TGT_LANG=tgt_lang,
+                        BATCH_SIZE=15,
+                        DEVICE="cuda",
+                        MODEL=model,
+                        **args
+                    )
+                    env.Depends(translation, prompt)
                 
-                translation = tenv.TranslateDocument(
-                    tenv.subst("${WORK_DIR}/${TESTAMENT}/${MANUSCRIPT}/${CONDITION_NAME}/${MODEL}/${LANGUAGE}.json.gz")
-                    inputs,
-                    PROMPT=prompt,
-                    SRC_LANG=src_lang,
-                    TGT_LANG=tgt_lang,
-                    BATCH_SIZE=15,
-                    DEVICE="cuda",
-                    MODEL=model,
-                    **args
-                )
-                env.Depends(translation, prompt)
                 
-                mt_translations[testament][manuscript][other_language][model_name][condition_name] = translation
                     
-                preds = env.PostProcess(
-                    tenv.subst("${WORK_DIR}/${TESTAMENT}/${MANUSCRIPT}/${CONDITION_NAME}/${MODEL}/${LANGUAGE}.json")
-                    translation,
-                    SRC_LANG=src_lang,
-                    TGT_LANG=tgt_lang
-                )
+                    preds = env.PostProcess(
+                        tenv.subst("${WORK_DIR}/${TESTAMENT}/${MANUSCRIPT}/${CONDITION_NAME}/${MODEL}/${LANGUAGE}.json")
+                        translation,
+                        SRC_LANG=src_lang,
+                        TGT_LANG=tgt_lang
+                    )
+
+                    emb = tenv.EmbedDocument(
+                        tenv.subst("${WORK_DIR}/${TESTAMENT}/${MANUSCRIPT}/${CONDITION_NAME}/${MODEL}/${LANGUAGE}-embedded.json.gz")
+                        preds,
+                        BATCH_SIZE=1000,
+                        DEVICE="cuda"                    
+                    )[0]
                 
                 # collect the bits you need for translation scoring, comet needs both human refs and sources
+                mt_translations[testament][manuscript][other_language][model_name][condition_name] = translation
                 human_translation = human_translations[testament][other_language]
                 original = originals[testament][manuscript][original_language]
 
@@ -249,13 +289,6 @@ for original in env["ORIGINALS"]:
                                       [preds, human_translation, original],
                                       TGT_LANG=other_language)
                             
-                    
-                emb = tenv.EmbedDocument(
-                    tenv.subst("${WORK_DIR}/${TESTAMENT}/${MANUSCRIPT}/${CONDITION_NAME}/${MODEL}/${LANGUAGE}-embedded.json.gz")
-                    preds,
-                    BATCH_SIZE=1000,
-                    DEVICE="cuda"                    
-                    )[0]
     
                 embeddings[testament][manuscript][other_language][condition_name]= emb
 
