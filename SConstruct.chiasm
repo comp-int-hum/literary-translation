@@ -1,137 +1,38 @@
-import glob
-import json
-import gzip
-import sys
 import os
-import imp
-from steamroller import Environment
-
-# workaround needed to fix bug with SCons and the pickle module
-del sys.modules['pickle']
-sys.modules['pickle'] = imp.load_module('pickle', *imp.find_module('pickle'))
-import pickle
 
 vars = Variables()
 
 vars.AddVariables(
-    ("WORK_DIR", "The directory where the work is done", "work/"),
-    ("N_LIST", "The list of n values for chiasmus", "4 5 6 7 8 9 10 11 12 13 14 15 16 17 18 19 20"),
+    ("WORK_DIR", "The directory where the work is done", "work"),
+    ("DATA_DIR", "The directory where the data is stored", "data"),
+    ("N_LIST", " ", [4,5,6,7,8]),
+    ("OT_DATA", "", "${DATA_DIR}/STEP/OT_aligned.json")
 )
 
 env = Environment(variables=vars,
                 ENV=os.environ,
                 tools=[],
                 BUILDERS={
-                    "ScoreTranslations": Builder(
-                        action="python3 scripts/score_translations.py --pred ${SOURCES[0]} --ref ${SOURCES[1]} --output ${TARGET}",
-                    ),
-                    "BuildTranslationScoreTable": Builder(
-                        action="python3 scripts/build_translation_score_table.py --scores ${SOURCES[0]} --output ${TARGET} --manuscript ${MANUSCRIPT} --condition ${CONDITION} --language ${LANGUAGE}",
-                    ),
                     "ScoreChiasm": Builder(
-                        action="python3 scripts/score_chiasm.py --embed ${SOURCES[0]} --output ${TARGET} --n ${N_LIST} --penalty ${PENALTY}",
+                        action="python scripts/score_chiasm.py --input ${SOURCE} --output ${TARGET} --group ${LEVEL} --feats ${FEATS}",
                     ),
-                    "BuildChiasmScoreTable": Builder(
-                        action="python3 scripts/build_chiasm_score_table.py --work ${SOURCES[0]} --output ${TARGET}",
-                    ),
-                    "FindDisputedPassages": Builder(
-                        action="python3 scripts/find_disputed_passages.py --scores ${SOURCES[0]} --translations ${SOURCES[1]} $--array ${TARGETS[0]} --passages ${TARGETS[1]} --p ${P} --n ${N}",
-                    ),
-                    "Heatmap": Builder(
-                        action="python3 scripts/heatmap.py --scores ${SOURCE} --output ${TARGET}",
-                    ),
-                },
-                )
+                    "InspectChiasm": Builder(
+                        action="python scripts/inspect_chiasm.py --input ${SOURCES[0]} --scores ${SOURCES[1]}  --output ${TARGET} --subset ${SUBSET}"
+                    )
+                 }
+)
 
 
-# first using glob to locate all the sources I need
-all_files = glob.glob(os.path.join(env['WORK_DIR'], "**/*.json.gz"), recursive=True)
-# so, wlc_translation_files contains multiple languages.
-TESTAMENTS = set([f.split("/")[-4] for f in all_files])
-MANUSCRIPTS = set([f.split("/")[-3] for f in all_files])
-CONDITIONS = set([f.split("/")[-2] for f in all_files])
-LANGUAGES = set([f.split("/")[-1].split("-")[0] for f in all_files])
-
-embeddings = glob.glob(os.path.join(env['WORK_DIR'], "**/*-embedded.json.gz"), recursive=True)
-translations = [f for f in all_files if "-embedded" not in f and "-chiasm" not in f and "-score" not in f and "-bleu" not in f]
+for level in ['half', 'verse',]: #'pesucha', 'setuma']:
+    for feats_combo in [['neural'],]:
+        feats = "_".join(feats_combo)
+        score = env.ScoreChiasm(os.path.join(env["WORK_DIR"], level, feats, 'scores.pkl'), env['OT_DATA'], 
+                        LEVEL=level, FEATS=feats_combo)
+        out_files = env.InspectChiasm(os.path.join(env["WORK_DIR"], f"{level}_{feats}_chiasm.xlsx"),
+                                    [env['OT_DATA'], score])
+        
 
 
+            
 
-# now I want to say, for each condition for the manuscripts wlc, old sinai, and new sinai,
-# calculate the BLEU score for each condition relative to the unconstrained condition in that language
-
-bleu_scores = {}
-for testament, manuscript in [('old', 'WLC-Hebrew'), ('old', 'Sinaiticus-Greek'), ('new', 'Sinaiticus-Greek')]:
-    for language in LANGUAGES:
-        human_translation_reference = os.path.join(env['WORK_DIR'], testament, "BC", "human_translation", f"{language}.json.gz")
-        for condition in CONDITIONS:
-            bleu_scores[(testament, manuscript, condition, language)] = env.ScoreTranslations(
-                os.path.join(env['WORK_DIR'], testament, manuscript, condition, f"{language}-bleu.jsonl"),
-                [os.path.join(env['WORK_DIR'], testament, manuscript, condition, f"{language}.json.gz"),
-                human_translation_reference],
-            )
-# make an alias for bleu scores
-env.Alias("bleu_scores", list(bleu_scores.values()))     
-# now I want to pass all the bleu scores to a builder which makes a .tex table of all the translation scores
-translation_tables = {}
-for manuscript in MANUSCRIPTS-{"BC"}:
-    translation_tables[manuscript] = env.BuildTranslationScoreTable(os.path.join(env['WORK_DIR'], f"{manuscript}_translation_scores.tex"), 
-                                                                    bleu_scores.values(), 
-                                                                    manuscript=manuscript)
-
-# alias for translation table
-env.Alias("translation_table", translation_tables.values())
-
-
-chiasm_scores = {}
-# very similar to above, for each testament, etc. call the score_chiasm builder
-for testament in TESTAMENTS:
-    for manuscript in MANUSCRIPTS:
-        for language in LANGUAGES:
-            for penalty in [True]:
-                chiasm_scores[(testament, manuscript, language, penalty)] = env.ScoreChiasm(
-                    os.path.join(env['WORK_DIR'], testament, manuscript, f"{language}-chiasm.jsonl"),
-                    os.path.join(env['WORK_DIR'], testament, manuscript, f"{language}-embedded.json.gz"),
-                    penalty=penalty,
-                )
-
-# make an alias for chiasm scores
-env.Alias("chiasm_scores", list(chiasm_scores.values()))
-
-# now I want to pass all the chiasm scores to a builder which makes a .tex table of all the chiasm scores
-# chiasm_table = env.BuildChiasmScoreTable(os.path.join(env['WORK_DIR'], "chiasm_scores.tex"), chiasm_scores.values())
-# # alias for chiasm table
-# env.Alias("chiasm_table", chiasm_table)
-wlc_chiasm_scores = glob.glob(os.path.join(env['WORK_DIR'], "**/Old/WLC-Hebrew/*-chiasm.jsonl"), recursive=True)
-old_sinai_chiasm_scores = glob.glob(os.path.join(env['WORK_DIR'], "**/Old/Sinaiticus-Greek/*-chiasm.jsonl"), recursive=True)
-new_sinai_chiasm_scores = glob.glob(os.path.join(env['WORK_DIR'], "**/New/Sinaiticus-Greek/*-chiasm.jsonl"), recursive=True)
-
-wlc_translation_files = [f for f in all_files if "WLC" in f and "-embedded" not in f and "-chiasm" not in f and "-score" not in f and "-bleu" not in f]
-old_sinai_translation_files = [f for f in all_files if "Sinaiticus-Greek" in f and "-embedded" not in f and "-chiasm" not in f and "-score" not in f and "-bleu" not in f]
-new_sinai_translation_files = [f for f in all_files if "Sinaiticus-Greek" in f and "-embedded" not in f and "-chiasm" not in f and "-score" not in f and "-bleu" not in f]
-
-
-# also want to pass the chiasm_scores to a builder FindDisputedPassages, which outputs a numpy array (of scores) and a csv file (of passages)
-
-for set in [(wlc_chiasm_scores, wlc_translation_files, "Old", "WLC-Hebrew"),
-            (old_sinai_chiasm_scores, old_sinai_translation_files, "Old", "Sinaiticus-Greek"),
-            (new_sinai_chiasm_scores, new_sinai_translation_files, "New", "Sinaiticus-Greek")]:
-       
-        stacked_scores, disputed_passages = env.FindDisputedPassages([os.path.join(env['WORK_DIR'], f"{set[-2]}_{set[-1]}_all_scores.npy"), 
-                                os.path.join(env['WORK_DIR'], f"{set[-2]}_{set[-1]}_disputed_passages.csv")], 
-                                [set[0],
-                                set[1]],
-                                p=0.01,
-                                n=10,
-                                )
-
-# make an alias for stacked scores
-env.Alias("disputed", [stacked_scores, disputed_passages])
-
-
-# # want to pass stacked scores to a builder that makes a heatmap
-# heatmap = env.Heatmap(os.path.join(env['WORK_DIR'], "heatmap.pdf"), stacked_scores)
-
-# env.Alias("heatmap", heatmap)
-
-
+        

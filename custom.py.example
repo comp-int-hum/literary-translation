@@ -1,3 +1,2 @@
-# BIBLE_CORPUS = "/home/tom/projects/bible-corpus"
-# CROSS_REFERENCE_FILE = "/home/tom/corpora/biblical-cross-references.txt"
-# DEVICE = "cuda:1"
+GPU_ACCOUNT = YOUR-GPU-ACCOUNT
+GPU_QUEUE = YOUR-GPU-PARTITION
